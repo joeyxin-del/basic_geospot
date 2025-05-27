@@ -228,13 +228,13 @@ class SpotGEOModel(BaseModel):
             else:  # [B, num_classes, H, W]
                 # 使用带掩码的二元交叉熵
                 mask = targets.get('mask', torch.ones_like(cls_target[:, :1]))
-                cls_loss = F.binary_cross_entropy_with_logits(
-                    cls_pred, cls_target, reduction='none'
-                )
-                cls_loss = (cls_loss * mask).sum() / (mask.sum() + 1e-6)
+            cls_loss = F.binary_cross_entropy_with_logits(
+                cls_pred, cls_target, reduction='none'
+            )
+            cls_loss = (cls_loss * mask).sum() / (mask.sum() + 1e-6)
         else:
             cls_loss = torch.tensor(0.0, device=cls_pred.device)
-            
+        
         # 处理回归标签
         if 'reg' in targets:
             reg_target = targets['reg']
@@ -243,7 +243,7 @@ class SpotGEOModel(BaseModel):
             reg_loss = (reg_loss * mask).sum() / (mask.sum() + 1e-6)
         else:
             reg_loss = torch.tensor(0.0, device=reg_pred.device)
-            
+        
         # 总损失
         total_loss = cls_loss + reg_loss
         
