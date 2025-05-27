@@ -1,0 +1,10 @@
+setup.py
+geo_detection.egg-info/PKG-INFO
+geo_detection.egg-info/SOURCES.txt
+geo_detection.egg-info/dependency_links.txt
+geo_detection.egg-info/top_level.txt
+src/__init__.py
+src/datasets/__init__.py
+src/datasets/base.py
+src/datasets/spotgeov2.py
+tests/test_datasets.py

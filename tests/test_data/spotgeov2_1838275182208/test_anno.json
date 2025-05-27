@@ -1,0 +1,192 @@
+[
+  {
+    "sequence_id": 0,
+    "frame": 0,
+    "num_objects": 2,
+    "object_coords": [
+      [
+        100,
+        100,
+        200,
+        200
+      ],
+      [
+        300,
+        300,
+        400,
+        400
+      ]
+    ]
+  },
+  {
+    "sequence_id": 0,
+    "frame": 1,
+    "num_objects": 2,
+    "object_coords": [
+      [
+        100,
+        100,
+        200,
+        200
+      ],
+      [
+        300,
+        300,
+        400,
+        400
+      ]
+    ]
+  },
+  {
+    "sequence_id": 0,
+    "frame": 2,
+    "num_objects": 2,
+    "object_coords": [
+      [
+        100,
+        100,
+        200,
+        200
+      ],
+      [
+        300,
+        300,
+        400,
+        400
+      ]
+    ]
+  },
+  {
+    "sequence_id": 0,
+    "frame": 3,
+    "num_objects": 2,
+    "object_coords": [
+      [
+        100,
+        100,
+        200,
+        200
+      ],
+      [
+        300,
+        300,
+        400,
+        400
+      ]
+    ]
+  },
+  {
+    "sequence_id": 0,
+    "frame": 4,
+    "num_objects": 2,
+    "object_coords": [
+      [
+        100,
+        100,
+        200,
+        200
+      ],
+      [
+        300,
+        300,
+        400,
+        400
+      ]
+    ]
+  },
+  {
+    "sequence_id": 1,
+    "frame": 0,
+    "num_objects": 2,
+    "object_coords": [
+      [
+        100,
+        100,
+        200,
+        200
+      ],
+      [
+        300,
+        300,
+        400,
+        400
+      ]
+    ]
+  },
+  {
+    "sequence_id": 1,
+    "frame": 1,
+    "num_objects": 2,
+    "object_coords": [
+      [
+        100,
+        100,
+        200,
+        200
+      ],
+      [
+        300,
+        300,
+        400,
+        400
+      ]
+    ]
+  },
+  {
+    "sequence_id": 1,
+    "frame": 2,
+    "num_objects": 2,
+    "object_coords": [
+      [
+        100,
+        100,
+        200,
+        200
+      ],
+      [
+        300,
+        300,
+        400,
+        400
+      ]
+    ]
+  },
+  {
+    "sequence_id": 1,
+    "frame": 3,
+    "num_objects": 2,
+    "object_coords": [
+      [
+        100,
+        100,
+        200,
+        200
+      ],
+      [
+        300,
+        300,
+        400,
+        400
+      ]
+    ]
+  },
+  {
+    "sequence_id": 1,
+    "frame": 4,
+    "num_objects": 2,
+    "object_coords": [
+      [
+        100,
+        100,
+        200,
+        200
+      ],
+      [
+        300,
+        300,
+        400,
+        400
+      ]
+    ]
+  }
+]

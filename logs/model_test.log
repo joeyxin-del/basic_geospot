@@ -1,0 +1,21 @@
+2025-05-26 23:56:17,135 - model_test - INFO - logger.py:114 - Available models: []
+2025-05-26 23:56:17,151 - model_test - INFO - logger.py:114 - 
+Testing Model Gradients:
+2025-05-26 23:56:17,152 - model_test - INFO - logger.py:114 - ------------------------------
+2025-05-26 23:56:17,157 - model_test - INFO - logger.py:114 - 
+Testing Model Configurations:
+2025-05-26 23:56:17,158 - model_test - INFO - logger.py:114 - ------------------------------
+2025-05-26 23:56:44,637 - model_test - INFO - logger.py:114 - Available models: []
+2025-05-26 23:56:44,653 - model_test - INFO - logger.py:114 - 
+Testing Model Gradients:
+2025-05-26 23:56:44,653 - model_test - INFO - logger.py:114 - ------------------------------
+2025-05-26 23:56:44,668 - model_test - INFO - logger.py:114 - 
+Testing Model Configurations:
+2025-05-26 23:56:44,669 - model_test - INFO - logger.py:114 - ------------------------------
+2025-05-26 23:57:20,997 - model_test - INFO - logger.py:114 - Available models: []
+2025-05-26 23:57:21,022 - model_test - INFO - logger.py:114 - 
+Testing Model Gradients:
+2025-05-26 23:57:21,023 - model_test - INFO - logger.py:114 - ------------------------------
+2025-05-26 23:57:21,031 - model_test - INFO - logger.py:114 - 
+Testing Model Configurations:
+2025-05-26 23:57:21,032 - model_test - INFO - logger.py:114 - ------------------------------
