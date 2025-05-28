@@ -2,3 +2,8 @@ datasets/
 .venv/
 
 uv.lock
+
+logs/
+outputs/
+
+.pytest_cache/

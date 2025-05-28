@@ -208,14 +208,14 @@ class Evaluator:
         
         # 整理结果
         results = {
-            'precision': precision,
-            'recall': recall,
-            'f1_score': f1,
-            'mse': mse,
-            'score': 1 - f1,  # 最终分数为1-F1
-            'tp': TP,
-            'fn': FN,
-            'fp': FP
+            'precision': float(precision),
+            'recall': float(recall),
+            'f1_score': float(f1),
+            'mse': float(mse),
+            'score': float(1 - f1),  # 最终分数为1-F1
+            'tp': int(TP),
+            'fn': int(FN),
+            'fp': int(FP)
         }
         
         # 保存结果

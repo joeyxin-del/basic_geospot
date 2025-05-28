@@ -1,0 +1,58 @@
+# 数据配置
+data:
+  # 数据路径（使用绝对路径）
+  root_dir: "E:/001research/006GEOdetection/002code/002basic_GEO_Detection"
+  train_dir: "${data.root_dir}/datasets/SpotGEOv2/train"
+  train_anno: "${data.root_dir}/datasets/SpotGEOv2/train_anno.json"
+  test_dir: "${data.root_dir}/datasets/SpotGEOv2/test"
+  test_anno: "${data.root_dir}/datasets/SpotGEOv2/test_anno.json"
+  
+  # 数据加载配置
+  batch_size: 4
+  pin_memory: true  # 由get_dataloader_config动态设置其他参数
+  
+  # 数据增强配置
+  augmentation:
+    train:
+      enabled: false  # 暂时禁用数据增强
+      horizontal_flip: true
+      vertical_flip: true
+      rotation: 15
+      brightness: 0.2
+      contrast: 0.2
+    val:
+      enabled: false
+
+# 模型配置
+model:
+  name: spotgeo
+  backbone_channels: [64, 128, 256, 512]  # 骨干网络通道数列表
+  detection_channels: [256, 128, 64]  # 检测头通道数列表
+  num_classes: 1
+  use_bn: true
+  dropout: 0.1
+
+# 训练配置
+training:
+  device: "cuda"  # 或 "cpu"
+  max_epochs: 100
+  eval_interval: 1
+  checkpoint_interval: 10
+  output_dir: "outputs"
+  use_wandb: true
+  wandb_project: "spotgeo"
+  early_stopping_patience: 10
+  resume: null  # 恢复训练的检查点路径
+
+# 优化器配置
+optimizer:
+  name: "Adam"
+  lr: 0.001
+  weight_decay: 0.0001
+  betas: [0.9, 0.999]
+
+# 学习率调度器配置
+scheduler:
+  name: "CosineAnnealingLR"
+  T_max: 100  # 总epoch数
+  eta_min: 0.00001  # 最小学习率 

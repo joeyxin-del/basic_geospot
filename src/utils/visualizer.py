@@ -16,32 +16,40 @@ class Visualizer:
     可视化工具类。
     用于可视化模型训练过程和结果，包括损失曲线、准确率曲线、检测结果和特征图等。
     """
-    def __init__(
-        self,
-        save_dir: str = "visualizations",
-        figsize: Tuple[int, int] = (10, 6),
-        dpi: int = 100,
-        style: str = "seaborn"
-    ):
+    def __init__(self, save_dir: str, style: str = 'default'):
         """
-        初始化可视化工具。
+        初始化可视化器。
         
         Args:
-            save_dir: 可视化结果保存目录
-            figsize: 图像大小
-            dpi: 图像分辨率
-            style: matplotlib样式
+            save_dir: 图表保存目录
+            style: matplotlib样式名称
         """
         self.save_dir = save_dir
-        self.figsize = figsize
-        self.dpi = dpi
-        self.style = style
-        
-        # 创建保存目录
         os.makedirs(save_dir, exist_ok=True)
         
         # 设置matplotlib样式
-        plt.style.use(style)
+        try:
+            # 尝试使用seaborn样式
+            import seaborn as sns
+            sns.set_style("whitegrid")
+            logger.info("Successfully set seaborn style")
+        except (ImportError, Exception) as e:
+            # 如果seaborn不可用，使用matplotlib默认样式
+            plt.style.use('default')
+            logger.warning(f"Failed to set seaborn style: {str(e)}, using default style instead")
+            
+        # 设置中文字体支持
+        try:
+            plt.rcParams['font.sans-serif'] = ['SimHei']  # 用来正常显示中文标签
+            plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
+        except Exception as e:
+            logger.warning(f"Failed to set Chinese font: {str(e)}")
+            
+        # 设置图表参数
+        plt.rcParams['figure.figsize'] = (10, 6)
+        plt.rcParams['figure.dpi'] = 100
+        plt.rcParams['savefig.dpi'] = 100
+        plt.rcParams['font.size'] = 12
         
         # 初始化数据存储
         self.metrics_history: Dict[str, List[float]] = {}
@@ -62,50 +70,35 @@ class Visualizer:
         filename = f"{name}_{timestamp}.{suffix}"
         return os.path.join(self.save_dir, filename)
         
-    def plot_metrics(
-        self,
-        metrics: Dict[str, List[float]],
-        title: str = "Training Metrics",
-        xlabel: str = "Epoch",
-        ylabel: str = "Value",
-        save: bool = True,
-        show: bool = False
-    ) -> Optional[Figure]:
+    def plot_metrics(self, metrics: Dict[str, List[float]], 
+                    title: str = "Training Metrics",
+                    save_name: Optional[str] = None) -> None:
         """
         绘制训练指标曲线。
         
         Args:
-            metrics: 指标数据，格式为 {指标名: [值列表]}
-            title: 图像标题
-            xlabel: x轴标签
-            ylabel: y轴标签
-            save: 是否保存图像
-            show: 是否显示图像
-            
-        Returns:
-            matplotlib图像对象
+            metrics: 指标字典，键为指标名称，值为指标值列表
+            title: 图表标题
+            save_name: 保存文件名，如果不指定则使用标题
         """
-        plt.figure(figsize=self.figsize, dpi=self.dpi)
+        plt.figure(figsize=(12, 6))
         
         for name, values in metrics.items():
             plt.plot(values, label=name, marker='o', markersize=3)
             
         plt.title(title)
-        plt.xlabel(xlabel)
-        plt.ylabel(ylabel)
+        plt.xlabel('Epoch')
+        plt.ylabel('Value')
         plt.grid(True)
         plt.legend()
         
-        if save:
-            save_path = self._get_save_path(f"metrics_{title.lower().replace(' ', '_')}")
-            plt.savefig(save_path, bbox_inches='tight', dpi=self.dpi)
-            logger.info(f"Saved metrics plot to {save_path}")
-            
-        if show:
-            plt.show()
-        else:
-            plt.close()
-            
+        if save_name is None:
+            save_name = title.lower().replace(' ', '_')
+        save_path = self._get_save_path(f"{save_name}")
+        plt.savefig(save_path, bbox_inches='tight', dpi=300)
+        plt.close()
+        logger.info(f"Saved metrics plot to {save_path}")
+        
     def update_metrics(self, metrics: Dict[str, float]) -> None:
         """
         更新训练指标。
@@ -140,8 +133,7 @@ class Visualizer:
         return self.plot_metrics(
             self.metrics_history,
             title="Training Progress",
-            save=save,
-            show=show
+            save_name=None
         )
         
     def plot_detection_results(
@@ -280,71 +272,183 @@ class Visualizer:
         else:
             plt.close()
             
-    def plot_confusion_matrix(
-        self,
-        confusion_matrix: np.ndarray,
-        labels: List[str],
-        title: str = "Confusion Matrix",
-        normalize: bool = True,
-        save: bool = True,
-        show: bool = False
-    ) -> Optional[Figure]:
+    def plot_confusion_matrix(self, confusion_matrix: np.ndarray,
+                            class_names: List[str],
+                            title: str = "Confusion Matrix",
+                            save_name: Optional[str] = None) -> None:
         """
         绘制混淆矩阵。
         
         Args:
-            confusion_matrix: 混淆矩阵
-            labels: 类别标签
-            title: 图像标题
-            normalize: 是否归一化
-            save: 是否保存图像
-            show: 是否显示图像
-            
-        Returns:
-            matplotlib图像对象
+            confusion_matrix: 混淆矩阵数组
+            class_names: 类别名称列表
+            title: 图表标题
+            save_name: 保存文件名
         """
-        if normalize:
-            confusion_matrix = confusion_matrix.astype('float') / confusion_matrix.sum(axis=1)[:, np.newaxis]
-            
-        plt.figure(figsize=self.figsize, dpi=self.dpi)
-        plt.imshow(confusion_matrix, interpolation='nearest', cmap=plt.cm.Blues)
-        plt.title(title)
+        plt.figure(figsize=(10, 8))
         
-        # 添加颜色条
+        # 归一化混淆矩阵
+        cm_normalized = confusion_matrix.astype('float') / confusion_matrix.sum(axis=1)[:, np.newaxis]
+        
+        # 绘制热力图
+        plt.imshow(cm_normalized, interpolation='nearest', cmap=plt.cm.Blues)
+        plt.title(title)
         plt.colorbar()
         
-        # 设置刻度标签
-        tick_marks = np.arange(len(labels))
-        plt.xticks(tick_marks, labels, rotation=45, ha='right')
-        plt.yticks(tick_marks, labels)
+        # 设置坐标轴
+        tick_marks = np.arange(len(class_names))
+        plt.xticks(tick_marks, class_names, rotation=45)
+        plt.yticks(tick_marks, class_names)
         
         # 添加数值标签
-        fmt = '.2f' if normalize else 'd'
-        thresh = confusion_matrix.max() / 2.
-        for i in range(confusion_matrix.shape[0]):
-            for j in range(confusion_matrix.shape[1]):
-                plt.text(
-                    j,
-                    i,
-                    format(confusion_matrix[i, j], fmt),
-                    ha="center",
-                    va="center",
-                    color="white" if confusion_matrix[i, j] > thresh else "black"
-                )
+        thresh = cm_normalized.max() / 2.
+        for i in range(cm_normalized.shape[0]):
+            for j in range(cm_normalized.shape[1]):
+                plt.text(j, i, f'{cm_normalized[i, j]:.2f}',
+                        ha="center", va="center",
+                        color="white" if cm_normalized[i, j] > thresh else "black")
                 
         plt.tight_layout()
         plt.ylabel('True label')
         plt.xlabel('Predicted label')
         
-        if save:
-            save_path = self._get_save_path(f"confusion_{title.lower().replace(' ', '_')}")
-            plt.savefig(save_path, bbox_inches='tight', dpi=self.dpi)
-            logger.info(f"Saved confusion matrix plot to {save_path}")
+        if save_name is None:
+            save_name = "confusion_matrix"
+        save_path = self._get_save_path(f"{save_name}")
+        plt.savefig(save_path, bbox_inches='tight', dpi=300)
+        plt.close()
+        logger.info(f"Saved confusion matrix to {save_path}")
+        
+    def plot_sample_predictions(self, images: torch.Tensor,
+                              predictions: Dict[str, torch.Tensor],
+                              targets: Optional[Dict[str, torch.Tensor]] = None,
+                              num_samples: int = 4,
+                              save_name: str = "sample_predictions") -> None:
+        """
+        绘制样本预测结果。
+        
+        Args:
+            images: 输入图像张量 [B, C, H, W]
+            predictions: 预测结果字典
+            targets: 目标值字典（可选）
+            num_samples: 要显示的样本数量
+            save_name: 保存文件名
+        """
+        num_samples = min(num_samples, images.size(0))
+        
+        # 创建子图
+        fig, axes = plt.subplots(num_samples, 2, figsize=(12, 4*num_samples))
+        if num_samples == 1:
+            axes = axes.reshape(1, -1)
             
-        if show:
-            plt.show()
-        else:
+        for i in range(num_samples):
+            # 显示原始图像
+            img = images[i].cpu().permute(1, 2, 0).numpy()
+            img = (img - img.min()) / (img.max() - img.min())
+            axes[i, 0].imshow(img)
+            axes[i, 0].set_title('Input Image')
+            axes[i, 0].axis('off')
+            
+            # 显示预测结果
+            pred = predictions['cls'][i, 0].cpu().detach().numpy()
+            axes[i, 1].imshow(pred, cmap='hot')
+            axes[i, 1].set_title('Prediction Heatmap')
+            axes[i, 1].axis('off')
+            
+            # 如果有目标值，显示目标
+            if targets is not None and 'cls' in targets:
+                target = targets['cls'][i, 0].cpu().numpy()
+                axes[i, 1].contour(target, colors='blue', alpha=0.5)
+                
+        plt.tight_layout()
+        save_path = self._get_save_path(f"{save_name}")
+        plt.savefig(save_path, bbox_inches='tight', dpi=300)
+        plt.close()
+        logger.info(f"Saved sample predictions to {save_path}")
+        
+    def plot_feature_maps(self, features: List[torch.Tensor],
+                         save_name: str = "feature_maps") -> None:
+        """
+        绘制特征图。
+        
+        Args:
+            features: 特征图列表
+            save_name: 保存文件名
+        """
+        for i, feat in enumerate(features):
+            # 选择前16个通道
+            feat = feat[0, :16].cpu().detach()
+            
+            # 创建子图
+            fig, axes = plt.subplots(4, 4, figsize=(12, 12))
+            axes = axes.ravel()
+            
+            for j in range(16):
+                if j < feat.size(0):
+                    axes[j].imshow(feat[j].numpy(), cmap='viridis')
+                    axes[j].set_title(f'Channel {j}')
+                    axes[j].axis('off')
+                    
+            plt.tight_layout()
+            save_path = self._get_save_path(f"{save_name}_layer_{i}")
+            plt.savefig(save_path, bbox_inches='tight', dpi=300)
             plt.close()
+            logger.info(f"Saved feature maps for layer {i} to {save_path}")
+            
+    def plot_learning_rate(self, lr_history: List[float],
+                          save_name: str = "learning_rate") -> None:
+        """
+        绘制学习率变化曲线。
+        
+        Args:
+            lr_history: 学习率历史记录
+            save_name: 保存文件名
+        """
+        plt.figure(figsize=(10, 4))
+        plt.plot(lr_history, marker='o', markersize=3)
+        plt.title('Learning Rate Schedule')
+        plt.xlabel('Step')
+        plt.ylabel('Learning Rate')
+        plt.grid(True)
+        plt.yscale('log')
+        
+        save_path = self._get_save_path(f"{save_name}")
+        plt.savefig(save_path, bbox_inches='tight', dpi=300)
+        plt.close()
+        logger.info(f"Saved learning rate plot to {save_path}")
+        
+    def plot_gradient_flow(self, named_parameters: Dict[str, torch.Tensor],
+                          save_name: str = "gradient_flow") -> None:
+        """
+        绘制梯度流图。
+        
+        Args:
+            named_parameters: 模型参数字典
+            save_name: 保存文件名
+        """
+        ave_grads = []
+        layers = []
+        for n, p in named_parameters:
+            if p.requires_grad and "bias" not in n:
+                layers.append(n)
+                ave_grads.append(p.grad.abs().mean().cpu().item())
+                
+        plt.figure(figsize=(10, 6))
+        plt.bar(np.arange(len(ave_grads)), ave_grads, alpha=0.5, lw=1, color="b")
+        plt.hlines(0, 0, len(ave_grads)+1, lw=2, color="r")
+        plt.xticks(range(0, len(ave_grads), 1), layers, rotation="vertical")
+        plt.xlim(left=0, right=len(ave_grads))
+        plt.ylim(bottom=-0.001, top=0.02)  # 根据实际情况调整
+        plt.xlabel("Layers")
+        plt.ylabel("Average Gradient")
+        plt.title("Gradient Flow")
+        plt.grid(True)
+        plt.tight_layout()
+        
+        save_path = self._get_save_path(f"{save_name}")
+        plt.savefig(save_path, bbox_inches='tight', dpi=300)
+        plt.close()
+        logger.info(f"Saved gradient flow plot to {save_path}")
 
 
 # 导出

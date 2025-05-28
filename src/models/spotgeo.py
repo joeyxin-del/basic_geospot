@@ -5,9 +5,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from PIL import Image
+from src.utils import get_logger
 
-from . import ModelFactory
 from .base import BaseModel
+
+logger = get_logger('spotgeo_model')
 
 
 class ConvBlock(nn.Module):
@@ -27,7 +29,6 @@ class ConvBlock(nn.Module):
         return self.act(self.bn(self.conv(x)))
 
 
-@ModelFactory.register('spotgeo')
 class SpotGEOModel(BaseModel):
     """
     SpotGEO检测模型。
@@ -43,6 +44,7 @@ class SpotGEOModel(BaseModel):
                 - detection_channels: 检测头通道数列表
                 - num_classes: 类别数量
                 - use_bn: 是否使用批归一化
+                - dropout: Dropout比率
         """
         super().__init__(config)
         self.config = config or {}
@@ -52,6 +54,7 @@ class SpotGEOModel(BaseModel):
         detection_channels = self.config.get('detection_channels', [256, 128, 64])
         self.num_classes = self.config.get('num_classes', 1)
         use_bn = self.config.get('use_bn', True)
+        self.dropout = self.config.get('dropout', 0.1)
         
         # 骨干网络
         self.backbone = nn.ModuleList()
@@ -79,6 +82,24 @@ class SpotGEOModel(BaseModel):
             nn.Flatten(),
             nn.Linear(detection_channels[-1], self.num_classes)
         )
+        
+        # 初始化权重
+        self._initialize_weights()
+        
+    def _initialize_weights(self):
+        """初始化模型权重"""
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.ConvTranspose2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
         
     def _preprocess_images(self, images: Union[List[Image.Image], torch.Tensor]) -> torch.Tensor:
         """
@@ -215,9 +236,9 @@ class SpotGEOModel(BaseModel):
             - total_loss: 总损失
         """
         pred_dict = predictions['predictions']
-        cls_pred = pred_dict['cls']
-        reg_pred = pred_dict['reg']
-        cls_logits = pred_dict['logits']
+        cls_pred = pred_dict['cls']  # [B, num_classes, H, W]
+        reg_pred = pred_dict['reg']  # [B, 2, H, W]
+        cls_logits = pred_dict['logits']  # [B, num_classes]
         
         # 处理分类标签
         if 'cls' in targets:
@@ -227,18 +248,36 @@ class SpotGEOModel(BaseModel):
                 cls_loss = F.cross_entropy(cls_logits, cls_target)
             else:  # [B, num_classes, H, W]
                 # 使用带掩码的二元交叉熵
-                mask = targets.get('mask', torch.ones_like(cls_target[:, :1]))
-            cls_loss = F.binary_cross_entropy_with_logits(
-                cls_pred, cls_target, reduction='none'
-            )
-            cls_loss = (cls_loss * mask).sum() / (mask.sum() + 1e-6)
+                if 'mask' in targets:
+                    mask = targets['mask']
+                else:
+                    # 创建一个全1的掩码，形状与cls_target匹配
+                    mask = torch.ones_like(cls_target[:, 0:1])  # 只取第一个通道作为掩码
+                
+                # 确保预测和目标具有相同的形状
+                if cls_pred.shape != cls_target.shape:
+                    cls_pred = cls_pred.view(cls_target.shape)
+                
+                cls_loss = F.binary_cross_entropy_with_logits(
+                    cls_pred, cls_target, reduction='none'
+                )
+                cls_loss = (cls_loss * mask).sum() / (mask.sum() + 1e-6)
         else:
             cls_loss = torch.tensor(0.0, device=cls_pred.device)
         
         # 处理回归标签
         if 'reg' in targets:
             reg_target = targets['reg']
-            mask = targets.get('mask', torch.ones_like(reg_target[:, :1]))
+            if 'mask' in targets:
+                mask = targets['mask']
+            else:
+                # 创建一个全1的掩码，形状与reg_target匹配
+                mask = torch.ones_like(reg_target[:, 0:1])  # 只取第一个通道作为掩码
+            
+            # 确保预测和目标具有相同的形状
+            if reg_pred.shape != reg_target.shape:
+                reg_pred = reg_pred.view(reg_target.shape)
+            
             reg_loss = F.l1_loss(reg_pred, reg_target, reduction='none')
             reg_loss = (reg_loss * mask).sum() / (mask.sum() + 1e-6)
         else:
@@ -251,4 +290,8 @@ class SpotGEOModel(BaseModel):
             'cls_loss': cls_loss,
             'reg_loss': reg_loss,
             'total_loss': total_loss
-        } 
+        }
+
+# 在文件末尾注册模型
+from src.models.registry import model_registry
+model_registry.register('spotgeo')(SpotGEOModel) 
