@@ -16,3 +16,6 @@
 2025-05-29 00:09:59,844 - visualizer - INFO - logger.py:114 - Successfully set seaborn style
 2025-05-29 00:12:52,625 - visualizer - INFO - logger.py:114 - Saved metrics plot to outputs\20250529_000959\evaluations\plots\evaluation_metrics_20250529_001252.png
 2025-05-29 00:15:42,338 - visualizer - INFO - logger.py:114 - Saved metrics plot to outputs\20250529_000959\evaluations\plots\evaluation_metrics_20250529_001542.png
+2025-05-29 00:29:07,850 - visualizer - INFO - logger.py:114 - Successfully set seaborn style
+2025-05-29 00:29:52,344 - visualizer - INFO - logger.py:114 - Successfully set seaborn style
+2025-05-29 00:33:15,700 - visualizer - INFO - logger.py:114 - Saved metrics plot to outputs\20250529_002951\evaluations\plots\evaluation_metrics_20250529_003315.png
