@@ -1,5 +1,5 @@
 # 数据集
-datasets/
+*/SpotGEOv2/
 data/
 
 # Python 虚拟环境
@@ -102,5 +102,3 @@ logs/
 outputs/
 *.log
 
-# 数据集
-datasets/
