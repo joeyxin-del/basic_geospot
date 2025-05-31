@@ -56,6 +56,9 @@ dependencies = [
     
     # 类型检查
     "typing-extensions>=4.0.0",
+
+    # 性能分析工具
+    "snakeviz",
 ]
 
 [project.optional-dependencies]
@@ -191,7 +194,9 @@ allow-insecure-host = [
     "download.pytorch.org"
 ]
 
-# 环境变量配置
-[tool.uv.env]
-PYTHONPATH = "."
-UV_LINK_MODE = "copy" 
+# 环境变量和其他设置
+[tool.uv.sources]
+# 这里可以配置特定包的源
+
+[tool.uv.workspace]
+# 工作空间配置（如果需要） 

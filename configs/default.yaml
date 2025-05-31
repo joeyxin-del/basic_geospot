@@ -1,11 +1,11 @@
 # 数据配置
 data:
   # 数据路径（使用绝对路径）
-  root_dir: "E:/001research/006GEOdetection/002code/002basic_GEO_Detection"
-  train_dir: "${data.root_dir}/datasets/SpotGEOv2/train"
-  train_anno: "${data.root_dir}/datasets/SpotGEOv2/train_anno.json"
-  test_dir: "${data.root_dir}/datasets/SpotGEOv2/test"
-  test_anno: "${data.root_dir}/datasets/SpotGEOv2/test_anno.json"
+  root_dir: "${hydra:runtime.cwd}/datasets"
+  train_dir: "${data.root_dir}/SpotGEOv2/train"
+  train_anno: "${data.root_dir}/SpotGEOv2/train_anno.json"
+  test_dir: "${data.root_dir}/SpotGEOv2/test"
+  test_anno: "${data.root_dir}/SpotGEOv2/test_anno.json"
   
   # 数据加载配置
   batch_size: 4
@@ -36,12 +36,12 @@ model:
 training:
   device: "cuda"  # 或 "cpu"
   max_epochs: 100
-  eval_interval: 1
+  eval_interval: 5
   checkpoint_interval: 10
   output_dir: "outputs"
   use_wandb: true
   wandb_project: "spotgeo"
-  early_stopping_patience: 10
+  early_stopping_patience: 50
   resume: null  # 恢复训练的检查点路径
 
 # 优化器配置
