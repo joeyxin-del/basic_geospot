@@ -97,3 +97,10 @@ dmypy.json
 *.temp
 temp/
 tmp/
+
+logs/
+outputs/
+*.log
+
+# 数据集
+datasets/
