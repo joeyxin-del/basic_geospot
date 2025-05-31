@@ -8,7 +8,7 @@ data:
   test_anno: "${data.root_dir}/SpotGEOv2/test_anno.json"
   
   # 数据加载配置
-  batch_size: 4
+  batch_size: 32
   pin_memory: true  # 由get_dataloader_config动态设置其他参数
   
   # 数据增强配置

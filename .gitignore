@@ -109,3 +109,4 @@ outputs/
 *.bmp
 *.tiff
 *.ico
+*.pyc
