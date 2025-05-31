@@ -450,6 +450,106 @@ class Visualizer:
         plt.close()
         logger.info(f"Saved gradient flow plot to {save_path}")
 
+    def plot_evaluation_results(self, metrics: Dict[str, float],
+                               title: str = "Evaluation Results",
+                               save_name: Optional[str] = None) -> None:
+        """
+        绘制单次评估结果的条形图。
+        
+        Args:
+            metrics: 指标字典，键为指标名称，值为单个指标值
+            title: 图表标题
+            save_name: 保存文件名，如果不指定则使用标题
+        """
+        plt.figure(figsize=(10, 6))
+        
+        # 准备数据
+        metric_names = list(metrics.keys())
+        metric_values = list(metrics.values())
+        
+        # 创建条形图
+        bars = plt.bar(metric_names, metric_values, 
+                      color=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728'],
+                      alpha=0.8, edgecolor='black', linewidth=1)
+        
+        # 添加数值标签
+        for bar, value in zip(bars, metric_values):
+            height = bar.get_height()
+            plt.text(bar.get_x() + bar.get_width()/2., height + height*0.01,
+                    f'{value:.4f}', ha='center', va='bottom', fontsize=10)
+        
+        plt.title(title, fontsize=14, fontweight='bold')
+        plt.ylabel('Value', fontsize=12)
+        plt.grid(True, alpha=0.3, axis='y')
+        plt.xticks(rotation=45)
+        
+        # 设置y轴范围，确保所有条形都可见
+        plt.ylim(0, max(metric_values) * 1.1)
+        
+        plt.tight_layout()
+        
+        if save_name is None:
+            save_name = title.lower().replace(' ', '_')
+        save_path = self._get_save_path(f"{save_name}")
+        plt.savefig(save_path, bbox_inches='tight', dpi=300)
+        plt.close()
+        logger.info(f"Saved evaluation results plot to {save_path}")
+        
+    def plot_single_metric(self, metric_name: str, values: List[float], 
+                          epochs: List[int], save_path: str) -> None:
+        """
+        绘制单个训练指标的曲线图。
+        
+        Args:
+            metric_name: 指标名称
+            values: 指标值列表
+            epochs: 对应的epoch列表
+            save_path: 保存路径
+        """
+        plt.figure(figsize=(10, 6))
+        
+        # 绘制曲线
+        plt.plot(epochs, values, marker='o', markersize=4, linewidth=2, 
+                color='#1f77b4', alpha=0.8)
+        
+        # 设置标题和标签
+        title = metric_name.replace('_', ' ').title()
+        plt.title(title, fontsize=14, fontweight='bold')
+        plt.xlabel('Epoch', fontsize=12)
+        plt.ylabel(title, fontsize=12)
+        
+        # 添加网格
+        plt.grid(True, alpha=0.3)
+        
+        # 设置x轴刻度
+        if len(epochs) <= 20:
+            plt.xticks(epochs)
+        
+        # 添加最值标注
+        if values:
+            min_val = min(values)
+            max_val = max(values)
+            min_idx = values.index(min_val)
+            max_idx = values.index(max_val)
+            
+            plt.annotate(f'Min: {min_val:.4f}', 
+                        xy=(epochs[min_idx], min_val), 
+                        xytext=(10, 10), textcoords='offset points',
+                        bbox=dict(boxstyle='round,pad=0.3', facecolor='lightblue', alpha=0.7),
+                        arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0'))
+            plt.annotate(f'Max: {max_val:.4f}', 
+                        xy=(epochs[max_idx], max_val), 
+                        xytext=(10, -20), textcoords='offset points',
+                        bbox=dict(boxstyle='round,pad=0.3', facecolor='lightcoral', alpha=0.7),
+                        arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0'))
+        
+        plt.tight_layout()
+        
+        # 保存图表
+        plt.savefig(save_path, bbox_inches='tight', dpi=300)
+        plt.close()
+        logger.info(f"Saved {metric_name} plot to {save_path}")
+
 
 # 导出
 __all__ = ['Visualizer'] 

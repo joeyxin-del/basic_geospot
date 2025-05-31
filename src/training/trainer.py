@@ -15,6 +15,7 @@ from tqdm import tqdm
 
 from src.utils import get_logger
 from src.utils.evaluator import Evaluator
+from src.utils.visualizer import Visualizer
 from src.postprocessing.heatmap_to_coords import heatmap_to_coords
 
 logger = get_logger('trainer')
@@ -77,6 +78,7 @@ class Trainer:
         self.output_dir = os.path.join(output_dir, self.experiment_name)
         os.makedirs(self.output_dir, exist_ok=True)
         os.makedirs(os.path.join(self.output_dir, 'checkpoints'), exist_ok=True)
+        os.makedirs(os.path.join(self.output_dir, 'plots'), exist_ok=True)
         
         # 训练配置
         self.checkpoint_interval = checkpoint_interval
@@ -86,6 +88,9 @@ class Trainer:
         
         # 评估器
         self.evaluator = Evaluator(save_dir=os.path.join(self.output_dir, 'evaluations'))
+        
+        # 可视化器
+        self.visualizer = Visualizer(save_dir=os.path.join(self.output_dir, 'plots'))
         
         # 训练状态
         self.current_epoch = 0
@@ -396,8 +401,8 @@ class Trainer:
         eval_results = self.evaluator.evaluate(
             predictions=predictions,
             ground_truth=ground_truth,
-            save=True,
-            plot=True
+            save=False,
+            plot=False
         )
         
         return {
@@ -427,6 +432,7 @@ class Trainer:
             total=self.max_epochs
         )
         
+        metrics_trainning = []
         for epoch in epoch_pbar:
             self.current_epoch = epoch
             
@@ -460,6 +466,7 @@ class Trainer:
                     'val_mse': val_metrics['mse'],
                     'lr': train_metrics['lr']
                 }
+                metrics_trainning.append(metrics)
                 
                 # 记录到wandb
                 if self.use_wandb:
@@ -503,6 +510,25 @@ class Trainer:
         
         # 关闭进度条
         epoch_pbar.close()
+
+        # 绘制训练指标图表
+        if metrics_trainning:
+            # 转换数据格式：从字典列表转为每个指标的值列表
+            plot_data = {}
+            for metric_name in metrics_trainning[0].keys():
+                plot_data[metric_name] = [m[metric_name] for m in metrics_trainning]
+            
+            # 准备epoch列表
+            epochs = [m['epoch'] for m in metrics_trainning]
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            
+            # 为每个指标生成单独的图表
+            for metric_name, values in plot_data.items():
+                if metric_name != 'epoch':  # 排除epoch键
+                    save_path = os.path.join(self.output_dir, 'plots', f'{metric_name}_{timestamp}.png')
+                    self.visualizer.plot_single_metric(metric_name, values, epochs, save_path)
+        else:
+            logger.warning("No metrics to plot - training was interrupted early")
                 
         # 训练结束
         logger.info("Training completed")

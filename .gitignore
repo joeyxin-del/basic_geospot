@@ -102,3 +102,10 @@ logs/
 outputs/
 *.log
 
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.tiff
+*.ico
