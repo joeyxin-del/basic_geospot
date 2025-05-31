@@ -1,0 +1,66 @@
+# SpotGEO 单帧训练配置文件 - 调试版本
+# 适用于快速测试和调试
+
+# ================================
+# 数据配置
+# ================================
+data:
+  train_dir: "datasets/SpotGEOv2/train"
+  train_anno: "datasets/SpotGEOv2/train_anno.json"
+  val_dir: "datasets/SpotGEOv2/test"
+  val_anno: "datasets/SpotGEOv2/test_anno.json"
+
+# ================================
+# 模型配置 - 精简版本
+# ================================
+model:
+  name: "spotgeo"
+  config:
+    backbone_channels: [32, 64, 128]      # 减少通道数以加快训练
+    detection_channels: [128, 64]         # 精简检测头
+    num_classes: 1
+    use_bn: true
+    dropout: 0.1
+
+# ================================
+# 训练配置 - 快速调试
+# ================================
+training:
+  # 小批次快速迭代
+  batch_size: 4                    # 小批次大小
+  num_workers: 2                   # 少量工作进程
+  epochs: 10                       # 少量轮数用于快速测试
+  lr: 0.001                        # 较高学习率快速收敛
+  
+  # 优化器和调度器
+  optimizer: "adam"
+  scheduler: "none"                # 不使用调度器简化训练
+  
+  # 训练控制
+  checkpoint_interval: 2           # 频繁保存检查点
+  eval_interval: 1                 # 每个epoch都验证
+  early_stopping_patience: 5      # 较小的耐心值
+
+# ================================
+# 输出配置
+# ================================
+output:
+  output_dir: "outputs/debug"      # 专门的调试输出目录
+  experiment_name: "singleframe_debug"
+
+# ================================
+# 设备配置
+# ================================
+device: "auto"
+
+# ================================
+# 日志配置
+# ================================
+logging:
+  use_wandb: false                 # 调试时不使用wandb
+  wandb_project: "spotgeo-debug"
+
+# ================================
+# 其他配置
+# ================================
+seed: 42 
