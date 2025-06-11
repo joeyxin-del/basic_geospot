@@ -443,6 +443,7 @@ def main():
         shuffle=True,
         num_workers=training_config['num_workers'],
         pin_memory=True if device == 'cuda' else False,
+        persistent_workers=True if training_config['num_workers'] > 0 else False,  # 保持工作进程存活
         collate_fn=custom_collate_fn
     )
     
@@ -452,6 +453,7 @@ def main():
         shuffle=False,
         num_workers=training_config['num_workers'],
         pin_memory=True if device == 'cuda' else False,
+        persistent_workers=True if training_config['num_workers'] > 0 else False,  # 保持工作进程存活
         collate_fn=custom_collate_fn
     )
     
@@ -463,7 +465,36 @@ def main():
     # 创建模型
     logger.info("创建模型...")
     model = get_model(config['model']['name'], config=model_config)
+    # 使用torchinfo打印模型信息
+    from torchinfo import summary
+    
+    # 获取一个批次的输入尺寸
+    batch_size = training_config['batch_size']
+    input_size = (batch_size, 3, 480, 640)  # 假设输入图像尺寸为480x640
+    
+    # 打印模型结构、参数量和计算量
+    model_stats = summary(
+        model, 
+        input_size=input_size,
+        col_names=["input_size", "output_size", "num_params", "kernel_size", "mult_adds"],
+        depth=4,
+        device=device
+    )
     logger.info(f"模型参数数量: {sum(p.numel() for p in model.parameters()):,}")
+    # 计算模型的计算量(FLOPs)和参数量
+    from thop import profile
+    input_tensor = torch.randn(32, 3, 480, 640).to(device)
+    flops, params = profile(model, inputs=(input_tensor,))
+    
+    # 转换为更易读的格式
+    def format_size(size):
+        for unit in ['', 'K', 'M', 'G', 'T', 'P']:
+            if size < 1000:
+                return f"{size:.2f}{unit}"
+            size /= 1000
+    
+    logger.info(f"模型计算量(FLOPs): {format_size(flops)}FLOPs")
+    logger.info(f"模型参数量(Params): {format_size(params)}") 
     
     # 创建优化器
     optimizer = create_optimizer(model, training_config['optimizer'], training_config['lr'])
@@ -475,6 +506,11 @@ def main():
     logger.info("创建训练器...")
     output_config = config['output']
     logging_config = config['logging']
+    
+    # 获取后处理配置
+    postprocessing_config = config.get('postprocessing', {})
+    conf_thresh = postprocessing_config.get('conf_thresh', 0.5)
+    topk = postprocessing_config.get('topk', 100)
     
     trainer = TrainerSingleFrame(
         model=model,
@@ -492,7 +528,9 @@ def main():
         eval_interval=training_config['eval_interval'],
         max_epochs=training_config['epochs'],
         early_stopping_patience=training_config['early_stopping_patience'],
-        resume=config['resume']
+        resume=config['resume'],
+        conf_thresh=conf_thresh,  # 传递置信度阈值
+        topk=topk                 # 传递topk参数
     )
     
     # 开始训练

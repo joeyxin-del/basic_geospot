@@ -18,9 +18,17 @@ model:
   config:
     backbone_channels: [64, 128, 256, 512]
     detection_channels: [256, 128, 64]
+    scale_factor: 0.25
     num_classes: 1
     use_bn: true
     dropout: 0.1
+
+# ================================
+# 后处理配置
+# ================================
+postprocessing:
+  conf_thresh: 0.1  # 置信度阈值，可以调整
+  topk: 100         # 每帧最多输出目标数
 
 # ================================
 # 训练配置 - GPU优化
@@ -29,7 +37,7 @@ training:
   # 更大的批次大小以充分利用GPU
   batch_size: 32                   # 较大的批次大小
   num_workers: 8                   # 更多工作进程
-  epochs: 200                      # 更多训练轮数
+  epochs: 400                      # 更多训练轮数
   lr: 0.0002                        # 稍高的学习率配合大批次
   
   # 优化器和调度器
@@ -37,16 +45,16 @@ training:
   scheduler: "cosine"              # 余弦调度器对长训练更友好
   
   # 训练控制
-  checkpoint_interval: 5           # 更频繁的检查点保存
-  eval_interval: 1
-  early_stopping_patience: 20     # 更高的耐心值
+  checkpoint_interval: 20           # 更频繁的检查点保存
+  eval_interval: 4
+  early_stopping_patience: 50     # 更高的耐心值
 
 # ================================
 # 输出配置
 # ================================
 output:
   output_dir: "outputs"
-  experiment_name: "singleframe_gpu_v1"
+  experiment_name: "singleframe_gpu_v2"
 
 # ================================
 # 设备配置

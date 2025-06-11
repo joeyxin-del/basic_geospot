@@ -50,7 +50,9 @@ class TrainerSingleFrame:
         eval_interval: int = 1,
         max_epochs: int = 100,
         early_stopping_patience: int = 10,
-        resume: Optional[str] = None
+        resume: Optional[str] = None,
+        conf_thresh: float = 0.5,  # 添加置信度阈值参数
+        topk: int = 100            # 添加topk参数
     ):
         """
         初始化单帧训练器。
@@ -73,6 +75,8 @@ class TrainerSingleFrame:
             max_epochs: 最大训练轮数
             early_stopping_patience: 早停耐心值
             resume: 恢复训练的检查点路径（可选）
+            conf_thresh: 置信度阈值
+            topk: topk参数
         """
         self.model = model.to(device)
         self.train_loader = train_loader
@@ -106,6 +110,10 @@ class TrainerSingleFrame:
         self.best_score = float('inf')
         self.best_epoch = 0
         self.patience_counter = 0
+        
+        # 后处理参数
+        self.conf_thresh = conf_thresh
+        self.topk = topk
         
         # wandb集成
         self.use_wandb = use_wandb and WANDB_AVAILABLE
@@ -232,24 +240,24 @@ class TrainerSingleFrame:
             
             # 前向传播
             self.optimizer.zero_grad()
+
             outputs = self.model(images)
-            
+
             # 获取模型输出的空间分辨率
             cls_pred = outputs['predictions']['cls']
             out_h, out_w = cls_pred.shape[-2:]
-            
-            # 创建目标张量（使用模型输出的分辨率）
+
             targets = self._create_target_tensors(labels, (out_h, out_w))
             targets = {k: v.to(self.device) for k, v in targets.items()}
-            
-            # 计算损失
+
+
             loss_dict = self.model.compute_loss(outputs, targets)
             loss = loss_dict['total_loss']
-            
+
             # 反向传播
             loss.backward()
             self.optimizer.step()
-            
+
             # 更新统计信息
             epoch_loss += loss.item()
             
@@ -258,7 +266,7 @@ class TrainerSingleFrame:
                 'Loss': f"{loss.item():.4f}",
                 'Avg Loss': f"{epoch_loss / (batch_idx + 1):.4f}"
             })
-                
+            
         # 计算平均损失
         avg_loss = epoch_loss / len(self.train_loader)
         epoch_time = time.time() - epoch_start_time
@@ -383,8 +391,8 @@ class TrainerSingleFrame:
                 coords_list = heatmap_to_coords(
                     cls_pred=outputs['predictions']['cls'].detach().cpu(),
                     reg_pred=outputs['predictions']['reg'].detach().cpu(),
-                    conf_thresh=0.5,
-                    topk=100,
+                    conf_thresh=self.conf_thresh,  # 使用配置的置信度阈值
+                    topk=self.topk,                # 使用配置的topk
                     scale=scale
                 )
                 
