@@ -52,7 +52,7 @@ class SpotGEOModel(BaseModel):
         # 配置参数
         base_backbone_channels = self.config.get('backbone_channels', [64, 128, 256, 512])
         base_detection_channels = self.config.get('detection_channels', [256, 128, 64])
-        scale_factor = self.config.get('scale_factor', 1)
+        scale_factor = self.config.get('scale_factor', 0.25)
         
         # 应用缩放因子
         backbone_channels = [int(ch * scale_factor) for ch in base_backbone_channels]

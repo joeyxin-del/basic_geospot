@@ -18,7 +18,7 @@ model:
   config:
     backbone_channels: [64, 128, 256, 512]
     detection_channels: [256, 128, 64]
-    scale_factor: 0.25
+    scale_factor: 0.50
     num_classes: 1
     use_bn: true
     dropout: 0.1
@@ -54,7 +54,7 @@ training:
 # ================================
 output:
   output_dir: "outputs"
-  experiment_name: "singleframe_gpu_v2"
+  experiment_name: "singleframe_gpu_v3"
 
 # ================================
 # 设备配置

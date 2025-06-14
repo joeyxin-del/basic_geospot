@@ -550,6 +550,34 @@ class Visualizer:
         plt.close()
         logger.info(f"Saved {metric_name} plot to {save_path}")
 
+    @staticmethod
+    def coords_to_img(coords: List[List[float]], width: int, height: int, color: tuple = (255, 0, 0)) -> np.ndarray:
+        """
+        将坐标点列表转换为图像大小的标注图像。
+        
+        Args:
+            coords: 坐标点列表，每个元素为 [x, y]
+            width: 图像宽度
+            height: 图像高度
+            color: 标注颜色，默认为蓝色 (255, 0, 0)
+            
+        Returns:
+            标注图像，形状为 (height, width, 3)
+        """
+        import cv2
+        
+        # 创建黑色背景图像
+        img = np.zeros((height, width, 3), dtype=np.uint8)
+        
+        # 绘制坐标点
+        for coord in coords:
+            x, y = int(coord[0]), int(coord[1])
+            # 确保坐标在图像范围内
+            if 0 <= x < width and 0 <= y < height:
+                cv2.circle(img, (x, y), 5, color, -1)  # 实心圆点
+        
+        return img
+
 
 # 导出
 __all__ = ['Visualizer'] 
