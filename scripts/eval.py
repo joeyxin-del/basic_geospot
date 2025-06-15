@@ -74,7 +74,7 @@ def evaluate(cfg: DictConfig):
     # 创建模型
     model = ModelFactory.create(
         name=cfg.model.name,
-        **cfg.model
+        cfg=cfg.model
     )
     
     # 加载检查点

@@ -46,6 +46,7 @@ class ModelRegistry:
         if name not in cls._models:
             raise ValueError(f"Model {name} not registered. "
                            f"Available models: {list(cls._models.keys())}")
+        print(config,"2222222222222222222222222222222222222")
         return cls._models[name](config)
     
     @classmethod
