@@ -2,33 +2,11 @@ import cv2
 import numpy as np
 import json
 import os
+from utils.visualizer import Visualizer
+
 
 # 将标注文件转换为图片
 
-def coords_to_img(coords, width, height, color=(255, 0, 0)):
-    """
-    将坐标点列表转换为图像大小的标注图像。
-    
-    Args:
-        coords: 坐标点列表，每个元素为 [x, y]
-        width: 图像宽度
-        height: 图像高度
-        color: 标注颜色，默认为蓝色 (255, 0, 0)
-        
-    Returns:
-        标注图像，形状为 (height, width, 3)
-    """
-    # 创建黑色背景图像
-    img = np.zeros((height, width, 3), dtype=np.uint8)
-    
-    # 绘制坐标点
-    for coord in coords:
-        x, y = int(coord[0]), int(coord[1])
-        # 确保坐标在图像范围内
-        if 0 <= x < width and 0 <= y < height:
-            cv2.circle(img, (x, y), 5, color, -1)  # 实心圆点
-    
-    return img
 
 def anno_to_pic(anno_dic, pic_path, img_width=800, img_height=600, object_color=(0, 0, 255)):
     """
@@ -46,7 +24,8 @@ def anno_to_pic(anno_dic, pic_path, img_width=800, img_height=600, object_color=
         return
     
     # 使用visualizer中的coords_to_img方法
-    img = coords_to_img(object_coords, img_width, img_height, object_color)
+    visualizer = Visualizer()
+    img = visualizer.coords_to_img(object_coords, img_width, img_height, object_color)
     
     # 保存图片
     cv2.imwrite(pic_path, img)

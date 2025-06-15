@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from PIL import Image
-from utils import get_logger
+from ..utils import get_logger
 
 from .base import BaseModel
 
@@ -28,8 +28,17 @@ class ConvBlock(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.act(self.bn(self.conv(x)))
 
+class ResBlock(nn.Module):
+    def __init__(self, in_channels: int, out_channels: int, 
+                 kernel_size: int = 3, stride: int = 1, 
+                 padding: int = 1, use_bn: bool = True):
+        super().__init__()
+        self.conv = ConvBlock(in_channels, out_channels, kernel_size, stride, padding, use_bn)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.conv(x) + x
 
-class SpotGEOModel(BaseModel):
+
+class SpotGEOModelRes(BaseModel):
     """
     SpotGEO检测模型。
     使用CNN提取特征，然后通过检测头预测目标位置和置信度。
@@ -299,4 +308,4 @@ class SpotGEOModel(BaseModel):
 
 # 在文件末尾注册模型
 from src.models.registry import model_registry
-model_registry.register('spotgeo')(SpotGEOModel) 
+model_registry.register('spotgeo_res')(SpotGEOModelRes) 
