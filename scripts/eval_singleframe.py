@@ -442,7 +442,7 @@ def main():
     postprocessing_config = config['postprocessing']
     conf_thresh = postprocessing_config['conf_thresh']
     topk = postprocessing_config['topk']
-    scale = postprocessing_config['scale']
+    # scale = postprocessing_config['scale']
     
     # 收集预测结果
     predictions = []
@@ -486,6 +486,12 @@ def main():
                     logger.error(f"predictions键包含: {list(outputs['predictions'].keys())}")
                 continue
             
+                # 计算缩放因子
+            out_h, out_w = cls_pred.shape[-2:]
+            scale_x = 640 / out_w  # 假设原图宽度为640
+            scale_y = 480 / out_h  # 假设原图高度为480
+            scale = (scale_x + scale_y) / 2
+
             # 使用heatmap_to_coords转换坐标
             coords_results = heatmap_to_coords(
                 cls_pred,
@@ -539,6 +545,18 @@ def main():
         with open(results_save_path, 'w', encoding='utf-8') as f:
             json.dump(results, f, indent=4, ensure_ascii=False)
         logger.info(f"详细结果已保存到: {results_save_path}")
+        
+        # 保存预测结果
+        predictions_save_path = os.path.join(output_dir, 'predictions.json')
+        with open(predictions_save_path, 'w', encoding='utf-8') as f:
+            json.dump(predictions, f, indent=4, ensure_ascii=False)
+        logger.info(f"预测结果已保存到: {predictions_save_path}")
+        
+        # 保存真实标签
+        ground_truth_save_path = os.path.join(output_dir, 'ground_truth.json')
+        with open(ground_truth_save_path, 'w', encoding='utf-8') as f:
+            json.dump(ground_truth, f, indent=4, ensure_ascii=False)
+        logger.info(f"真实标签已保存到: {ground_truth_save_path}")
         
     except Exception as e:
         logger.error(f"评估失败: {str(e)}")
