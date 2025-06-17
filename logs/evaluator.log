@@ -7,3 +7,4 @@
 2025-06-15 13:16:32,733 - evaluator - INFO - logger.py:114 - Evaluation results saved to outputs/evaluation\my_eval\evaluation_20250615_131632.json
 2025-06-15 16:00:54,092 - evaluator - INFO - logger.py:114 - Evaluation results saved to outputs/evaluation\my_eval\evaluation_20250615_160054.json
 2025-06-15 16:17:15,476 - evaluator - INFO - logger.py:114 - Evaluation results saved to outputs/evaluation\my_evalv2\evaluation_20250615_161714.json
+2025-06-17 17:24:58,192 - evaluator - INFO - logger.py:114 - Evaluation results saved to outputs/evaluation\my_eval_res_v1\evaluation_20250617_172458.json

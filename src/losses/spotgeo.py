@@ -8,10 +8,101 @@ from . import LossFactory
 from .base import BaseLoss
 
 
+class BinaryCrossEntropyLoss(nn.Module):
+    """
+    二元交叉熵损失实现。
+    """
+    def __init__(self, pos_weight: Optional[torch.Tensor] = None, reduction: str = 'mean'):
+        """
+        初始化二元交叉熵损失。
+        
+        Args:
+            pos_weight: 正样本权重
+            reduction: 损失归约方式
+        """
+        super().__init__()
+        self.pos_weight = pos_weight
+        self.reduction = reduction
+        
+    def forward(self, inputs: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        """
+        计算二元交叉熵损失。
+        
+        Args:
+            inputs: 模型预测的 logits [B, C, H, W]
+            targets: 目标标签 [B, C, H, W]
+            
+        Returns:
+            二元交叉熵损失值
+        """
+        return F.binary_cross_entropy_with_logits(
+            inputs, targets, 
+            pos_weight=self.pos_weight,
+            reduction=self.reduction
+        )
+
+
+class FocalLoss(nn.Module):
+    """
+    Focal Loss 实现。
+    使用 PyTorch 官方的 Focal Loss。
+    """
+    def __init__(self, alpha: float = 1.0, gamma: float = 2.0, reduction: str = 'mean'):
+        """
+        初始化 Focal Loss。
+        
+        Args:
+            alpha: 平衡正负样本的权重因子
+            gamma: 聚焦参数，用于降低易分样本的权重
+            reduction: 损失归约方式
+        """
+        super().__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.reduction = reduction
+        
+    def forward(self, inputs: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        """
+        计算 Focal Loss。
+        
+        Args:
+            inputs: 模型预测的 logits [B, C, H, W]
+            targets: 目标标签 [B, C, H, W]
+            
+        Returns:
+            Focal Loss 值
+        """
+        # 计算 sigmoid
+        probs = torch.sigmoid(inputs)
+        
+        # 计算二元交叉熵
+        ce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction='none')
+        
+        # 计算 pt (预测概率与真实标签的匹配程度)
+        pt = probs * targets + (1 - probs) * (1 - targets)
+        
+        # 计算 focal weight
+        focal_weight = (1 - pt) ** self.gamma
+        
+        # 应用 alpha 权重
+        alpha_weight = self.alpha * targets + (1 - self.alpha) * (1 - targets)
+        
+        # 计算 focal loss
+        focal_loss = alpha_weight * focal_weight * ce_loss
+        
+        # 应用归约
+        if self.reduction == 'mean':
+            return focal_loss.mean()
+        elif self.reduction == 'sum':
+            return focal_loss.sum()
+        else:  # 'none'
+            return focal_loss
+
+
 class ClassificationLoss(BaseLoss):
     """
     分类损失函数。
-    使用带掩码的二元交叉熵损失。
+    支持二元交叉熵损失和 Focal Loss，可通过配置选择。
     """
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
@@ -19,14 +110,35 @@ class ClassificationLoss(BaseLoss):
         
         Args:
             config: 损失函数配置字典，包含以下键：
-                - pos_weight: 正样本权重（可选）
+                - loss_type: 损失类型，'binary' 或 'focal'（可选，默认为'focal'）
+                - alpha: Focal Loss 的 alpha 参数（可选，默认为1.0）
+                - gamma: Focal Loss 的 gamma 参数（可选，默认为2.0）
+                - pos_weight: 二元交叉熵的正样本权重（可选）
                 - reduction: 损失归约方式（可选，默认为'none'）
         """
         super().__init__(config)
-        self.pos_weight = self.config.get('pos_weight', None)
-        if self.pos_weight is not None:
-            self.pos_weight = torch.tensor(self.pos_weight)
+        self.loss_type = self.config.get('loss_type', 'focal')
         self.reduction = self.config.get('reduction', 'none')
+        
+        # 根据损失类型创建相应的损失函数
+        if self.loss_type == 'focal':
+            alpha = self.config.get('alpha', 1.0)
+            gamma = self.config.get('gamma', 2.0)
+            self.loss_fn = FocalLoss(
+                alpha=alpha,
+                gamma=gamma,
+                reduction='none'  # 我们会在 forward 中手动处理归约
+            )
+        elif self.loss_type == 'binary':
+            pos_weight = self.config.get('pos_weight', None)
+            if pos_weight is not None:
+                pos_weight = torch.tensor(pos_weight)
+            self.loss_fn = BinaryCrossEntropyLoss(
+                pos_weight=pos_weight,
+                reduction='none'  # 我们会在 forward 中手动处理归约
+            )
+        else:
+            raise ValueError(f"不支持的损失类型: {self.loss_type}。支持的类型: 'binary', 'focal'")
         
     def forward(self, predictions: Dict[str, torch.Tensor], 
                 targets: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
@@ -48,16 +160,11 @@ class ClassificationLoss(BaseLoss):
         cls_target = targets['cls']
         mask = targets['mask']
         
-        # 计算带掩码的二元交叉熵损失
-        loss = F.binary_cross_entropy_with_logits(
-            cls_pred, cls_target, 
-            pos_weight=self.pos_weight.to(cls_pred.device) if self.pos_weight is not None else None,
-            reduction=self.reduction
-        )
+        # 计算损失
+        loss = self.loss_fn(cls_pred, cls_target)
         
         # 应用掩码并计算平均损失
-        if self.reduction == 'none':
-            loss = (loss * mask).sum() / (mask.sum() + 1e-6)
+        loss = (loss * mask).sum() / (mask.sum() + 1e-6)
             
         return {'loss': loss}
 
