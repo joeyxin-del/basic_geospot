@@ -6,6 +6,7 @@ import torch.nn.functional as F
 import numpy as np
 from PIL import Image
 from ..utils import get_logger
+from ..losses.spotgeo import SpotGEOLoss
 
 from .base import BaseModel
 
@@ -99,6 +100,10 @@ class SpotGEOModelRes(BaseModel):
         
         # 初始化权重
         self._initialize_weights()
+        
+        # 初始化损失函数
+        loss_config = self.config.get('loss', {})
+        self.loss_fn = SpotGEOLoss(loss_config)
         
     def _initialize_weights(self):
         """初始化模型权重"""
@@ -252,59 +257,30 @@ class SpotGEOModelRes(BaseModel):
         pred_dict = predictions['predictions']
         cls_pred = pred_dict['cls']  # [B, num_classes, H, W]
         reg_pred = pred_dict['reg']  # [B, 2, H, W]
-        cls_logits = pred_dict['logits']  # [B, num_classes]
         
-        # 处理分类标签
-        if 'cls' in targets:
-            cls_target = targets['cls']
-            if cls_target.dim() == 2:  # [B, num_classes]
-                # 使用交叉熵损失
-                cls_loss = F.cross_entropy(cls_logits, cls_target)
-            else:  # [B, num_classes, H, W]
-                # 使用带掩码的二元交叉熵
-                if 'mask' in targets:
-                    mask = targets['mask']
-                else:
-                    # 创建一个全1的掩码，形状与cls_target匹配
-                    mask = torch.ones_like(cls_target[:, 0:1])  # 只取第一个通道作为掩码
-                
-                # 确保预测和目标具有相同的形状
-                if cls_pred.shape != cls_target.shape:
-                    cls_pred = cls_pred.view(cls_target.shape)
-                
-                cls_loss = F.binary_cross_entropy_with_logits(
-                    cls_pred, cls_target, reduction='none'
-                )
-                cls_loss = (cls_loss * mask).sum() / (mask.sum() + 1e-6)
-        else:
-            cls_loss = torch.tensor(0.0, device=cls_pred.device)
-        
-        # 处理回归标签
-        if 'reg' in targets:
-            reg_target = targets['reg']
-            if 'mask' in targets:
-                mask = targets['mask']
-            else:
-                # 创建一个全1的掩码，形状与reg_target匹配
-                mask = torch.ones_like(reg_target[:, 0:1])  # 只取第一个通道作为掩码
-            
-            # 确保预测和目标具有相同的形状
-            if reg_pred.shape != reg_target.shape:
-                reg_pred = reg_pred.view(reg_target.shape)
-            
-            reg_loss = F.l1_loss(reg_pred, reg_target, reduction='none')
-            reg_loss = (reg_loss * mask).sum() / (mask.sum() + 1e-6)
-        else:
-            reg_loss = torch.tensor(0.0, device=reg_pred.device)
-        
-        # 总损失
-        total_loss = cls_loss + reg_loss
-        
-        return {
-            'cls_loss': cls_loss,
-            'reg_loss': reg_loss,
-            'total_loss': total_loss
+        # 准备损失函数需要的输入格式
+        loss_predictions = {
+            'cls': cls_pred,
+            'reg': reg_pred
         }
+        
+        # 准备目标格式，确保包含mask
+        loss_targets = {}
+        if 'cls' in targets:
+            loss_targets['cls'] = targets['cls']
+        if 'reg' in targets:
+            loss_targets['reg'] = targets['reg']
+        
+        # 如果没有提供mask，创建一个全1的掩码
+        if 'mask' not in loss_targets:
+            # 使用分类预测的形状创建掩码
+            mask = torch.ones_like(cls_pred[:, 0:1])  # [B, 1, H, W]
+            loss_targets['mask'] = mask
+        
+        # 使用SpotGEOLoss计算损失
+        loss_dict = self.loss_fn(loss_predictions, loss_targets)
+        
+        return loss_dict
 
 # 在文件末尾注册模型
 from src.models.registry import model_registry

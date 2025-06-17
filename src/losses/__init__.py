@@ -60,4 +60,7 @@ class LossFactory:
 
 
 # 导出工厂类
-__all__ = ['LossFactory', 'BaseLoss'] 
+__all__ = ['LossFactory', 'BaseLoss']
+
+# 导入损失函数以触发注册
+from .spotgeo import ClassificationLoss, RegressionLoss, SpotGEOLoss 

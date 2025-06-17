@@ -30,6 +30,16 @@ model:
     use_bn: true                   # 是否使用批归一化
     dropout: 0.1                   # Dropout比率
     scale_factor: 0.25             # 模型缩放因子（减少参数量）
+    
+    # 损失函数配置
+    loss:
+      cls_weight: 1.0              # 分类损失权重
+      reg_weight: 1.0              # 回归损失权重
+      cls_config:                  # 分类损失配置
+        pos_weight: 10.0           # 正样本权重（处理类别不平衡）
+        reduction: "none"          # 损失归约方式
+      reg_config:                  # 回归损失配置
+        reduction: "none"          # 损失归约方式
 
 # ================================
 # 训练配置
@@ -73,7 +83,7 @@ logging:
 # 后处理配置
 # ================================
 postprocessing:
-  conf_thresh: 0.5                 # 置信度阈值
+  conf_thresh: 0.1                 # 置信度阈值
   topk: 100                       # 保留的top-k预测
 
 # ================================
