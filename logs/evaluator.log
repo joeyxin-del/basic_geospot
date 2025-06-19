@@ -8,3 +8,6 @@
 2025-06-15 16:00:54,092 - evaluator - INFO - logger.py:114 - Evaluation results saved to outputs/evaluation\my_eval\evaluation_20250615_160054.json
 2025-06-15 16:17:15,476 - evaluator - INFO - logger.py:114 - Evaluation results saved to outputs/evaluation\my_evalv2\evaluation_20250615_161714.json
 2025-06-17 17:24:58,192 - evaluator - INFO - logger.py:114 - Evaluation results saved to outputs/evaluation\my_eval_res_v1\evaluation_20250617_172458.json
+2025-06-17 19:30:45,361 - evaluator - INFO - logger.py:114 - Evaluation results saved to outputs/evaluation\my_eval_res_v1_lenovo\evaluation_20250617_193045.json
+2025-06-17 19:36:28,376 - evaluator - INFO - logger.py:114 - Evaluation results saved to outputs/evaluation\my_eval_res_v1_lenovo\evaluation_20250617_193628.json
+2025-06-17 19:47:58,488 - evaluator - INFO - logger.py:114 - Evaluation results saved to outputs/evaluation\my_eval_res_v1_lenovo\evaluation_20250617_194758.json

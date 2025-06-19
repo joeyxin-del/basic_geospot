@@ -431,8 +431,9 @@ def save_visualization(results: Dict[str, Any], output_dir: str, filename: str):
             for coord in coords:
                 x, y = int(coord[0]), int(coord[1])
                 if 0 <= x < width and 0 <= y < height:
-                    cv2.circle(comparison_image, (x, y), 5, (255, 0, 0), -1)      # 蓝色圆点
-                    cv2.circle(comparison_image, (x, y), 7, (255, 0, 0), 2)       # 蓝色圆圈
+                    # cv2.circle(comparison_image, (x, y), 5, (255, 0, 0), -1)      # 蓝色圆点
+                    cv2.rectangle(comparison_image, (x-5, y-5), (x+5, y+5), (255, 0, 0), 2)
+                    # cv2.circle(comparison_image, (x, y), 7, (255, 0, 0), 2)       # 蓝色圆圈
         
         comparison_path = os.path.join(image_output_dir, "04_comparison.jpg")
         cv2.imwrite(comparison_path, comparison_image)

@@ -422,7 +422,7 @@ def main():
     
     # 加载检查点
     logger.info(f"加载检查点: {config['checkpoint']}")
-    checkpoint = torch.load(config['checkpoint'], map_location=device)
+    checkpoint = torch.load(config['checkpoint'], map_location=device, weights_only=True)
     
     # 处理不同的检查点格式
     if 'model_state_dict' in checkpoint:

@@ -574,7 +574,8 @@ class Visualizer:
             x, y = int(coord[0]), int(coord[1])
             # 确保坐标在图像范围内
             if 0 <= x < width and 0 <= y < height:
-                cv2.circle(img, (x, y), 5, color, -1)  # 实心圆点
+                # cv2.circle(img, (x, y), 5, color, -1)  # 实心圆点
+                cv2.rectangle(img, (x-5, y-5), (x+5, y+5), color, -1)
         
         return img
 

@@ -190,11 +190,21 @@ class Evaluator:
         assert set(pred_h.keys()) == set(gt_h.keys())
         
         # 计算每个序列的分数
-        seq_scores = [
-            self._score_sequence(pred_h[k], gt_h[k])
-            for k in pred_h.keys()
-        ]
+        seq_scores = []
+        seq_f1s = []
+        for k in pred_h.keys():
+            score = self._score_sequence(pred_h[k], gt_h[k])
+            # 修复除零错误：当分母为0时，F1分数为0
+            denominator = 2 * score[0] + score[1] + score[2]
+            seq_f1 = 2 * score[0] / denominator if denominator > 0 else 0.0
+            seq_scores.append(score)
+            seq_f1s.append({k:seq_f1})
         
+        seq_f1s = sorted(seq_f1s, key=lambda x: list(x.values())[0], reverse=True)
+        seq_f1s = seq_f1s[:10]
+        for seq_f1 in seq_f1s:
+            print(seq_f1)
+
         # 汇总结果
         TP = sum(x[0] for x in seq_scores)
         FN = sum(x[1] for x in seq_scores)
@@ -240,7 +250,7 @@ class Evaluator:
             )
             
         return results
-        
+
     def get_summary(self, results: Dict[str, float]) -> str:
         """
         生成评估结果摘要。
@@ -263,7 +273,6 @@ class Evaluator:
             f"False Positives: {results['fp']}"
         ]
         return "\n".join(summary)
-
 
 # 导出
 __all__ = ['Evaluator'] 
