@@ -57,8 +57,8 @@ device: "auto"
 # 日志配置
 # ================================
 logging:
-  use_wandb: false                 # 调试时不使用wandb
-  wandb_project: "spotgeo-debug"
+  use_swanlab: false                 # 调试时不使用swanlab
+  swanlab_project: "spotgeo-debug"
 
 # ================================
 # 其他配置

@@ -49,7 +49,7 @@ model:
 # ================================
 training:
   # 基本训练参数
-  batch_size: 16                 # 批次大小（可根据GPU内存调整）
+  batch_size: 2                 # 批次大小（可根据GPU内存调整）
   num_workers: 4                   # 数据加载器工作进程数
   epochs: 400                     # 训练轮数
   lr: 0.0001                       # 学习率
@@ -79,8 +79,8 @@ device: "auto"                     # 训练设备 (auto/cuda/cpu)
 # 日志配置
 # ================================
 logging:
-  use_wandb: false                 # 是否使用wandb记录
-  wandb_project: "spotgeo-singleframe-res"  # wandb项目名称
+  use_swanlab: true                 # 是否使用swanlab记录
+  swanlab_project: "spotgeo-singleframe-res"  # swanlab项目名称
 
 # ================================
 # 后处理配置

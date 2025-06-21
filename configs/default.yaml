@@ -39,8 +39,8 @@ training:
   eval_interval: 5
   checkpoint_interval: 10
   output_dir: "outputs"
-  use_wandb: true
-  wandb_project: "spotgeo"
+  use_swanlab: true
+  swanlab_project: "spotgeo"
   early_stopping_patience: 50
   resume: null  # 恢复训练的检查点路径
 

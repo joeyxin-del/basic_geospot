@@ -7,8 +7,8 @@ project_root = os.path.dirname(current_dir)
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-# 设置 wandb 离线模式（避免网络问题）
-os.environ["WANDB_MODE"] = "offline"
+# 设置 swanlab 离线模式（避免网络问题）
+os.environ["SWANLAB_MODE"] = "offline"
 
 import argparse
 import torch
@@ -143,8 +143,8 @@ def train(cfg: DictConfig) -> None:
         scheduler=scheduler,
         device=cfg.training.device,
         output_dir=cfg.training.output_dir,
-        use_wandb=cfg.training.use_wandb,
-        wandb_project=cfg.training.wandb_project,
+        use_swanlab=cfg.training.use_swanlab,
+        swanlab_project=cfg.training.swanlab_project,
         checkpoint_interval=cfg.training.checkpoint_interval,
         eval_interval=cfg.training.eval_interval,
         max_epochs=cfg.training.max_epochs,

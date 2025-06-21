@@ -104,10 +104,10 @@ def parse_args():
     # 其他参数
     parser.add_argument('--device', type=str, default=None,
                        help='训练设备 (cuda/cpu/auto)')
-    parser.add_argument('--use_wandb', action='store_true', default=None,
-                       help='是否使用wandb记录')
-    parser.add_argument('--wandb_project', type=str, default=None,
-                       help='wandb项目名称')
+    parser.add_argument('--use_swanlab', action='store_true', default=None,
+                        help='是否使用swanlab记录')
+    parser.add_argument('--swanlab_project', type=str, default=None,
+                        help='swanlab项目名称')
     parser.add_argument('--seed', type=int, default=None,
                        help='随机种子')
     
@@ -175,10 +175,10 @@ def args_to_config(args) -> Dict[str, Any]:
     
     # 日志配置
     logging_config = {}
-    if args.use_wandb is not None:
-        logging_config['use_wandb'] = args.use_wandb
-    if args.wandb_project is not None:
-        logging_config['wandb_project'] = args.wandb_project
+    if args.use_swanlab is not None:
+        logging_config['use_swanlab'] = args.use_swanlab
+    if args.swanlab_project is not None:
+        logging_config['swanlab_project'] = args.swanlab_project
     if logging_config:
         config['logging'] = logging_config
     
@@ -223,8 +223,8 @@ def get_final_config(args) -> Dict[str, Any]:
         },
         'device': 'auto',
         'logging': {
-            'use_wandb': False,
-            'wandb_project': 'spotgeo-singleframe'
+            'use_swanlab': False,
+            'swanlab_project': 'spotgeo-singleframe'
         },
         'seed': 42,
         'resume': None,
@@ -521,9 +521,9 @@ def main():
         device=device,
         output_dir=output_config['output_dir'],
         experiment_name=output_config['experiment_name'],
-        use_wandb=logging_config['use_wandb'],
-        wandb_project=logging_config['wandb_project'],
-        wandb_mode='offline',  # 固定为offline模式
+        use_swanlab=logging_config['use_swanlab'],
+        swanlab_project=logging_config['swanlab_project'],
+        swanlab_mode='cloud',  # 固定为offline模式 offline
         checkpoint_interval=training_config['checkpoint_interval'],
         eval_interval=training_config['eval_interval'],
         max_epochs=training_config['epochs'],

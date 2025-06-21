@@ -65,8 +65,8 @@ device: "cuda"                    # 强制使用GPU
 # 日志配置
 # ================================
 logging:
-  use_wandb: true                 # 启用wandb记录
-  wandb_project: "spotgeo-singleframe-gpu"
+  use_swanlab: true                 # 启用swanlab记录
+  swanlab_project: "spotgeo-singleframe-gpu"
 
 # ================================
 # 其他配置

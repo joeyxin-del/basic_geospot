@@ -103,7 +103,7 @@ def test_trainer_initialization(trainer_components, temp_output_dir, device):
         scheduler=trainer_components['scheduler'],
         device=device,
         output_dir=temp_output_dir,
-        use_wandb=False,
+        use_swanlab=False,
         max_epochs=2
     )
     
@@ -122,7 +122,7 @@ def test_create_target_tensors(trainer_components, temp_output_dir, device):
         optimizer=trainer_components['optimizer'],
         device=device,
         output_dir=temp_output_dir,
-        use_wandb=False
+        use_swanlab=False
     )
     
     labels = [
@@ -151,7 +151,7 @@ def test_save_load_checkpoint(trainer_components, temp_output_dir, device):
         scheduler=trainer_components['scheduler'],
         device=device,
         output_dir=temp_output_dir,
-        use_wandb=False
+        use_swanlab=False
     )
     
     # 保存检查点
@@ -171,7 +171,7 @@ def test_save_load_checkpoint(trainer_components, temp_output_dir, device):
         scheduler=trainer_components['scheduler'],
         device=device,
         output_dir=temp_output_dir,
-        use_wandb=False,
+        use_swanlab=False,
         resume=checkpoint_path
     )
     
@@ -187,7 +187,7 @@ def test_train_epoch(trainer_components, temp_output_dir, device):
         optimizer=trainer_components['optimizer'],
         device=device,
         output_dir=temp_output_dir,
-        use_wandb=False
+        use_swanlab=False
     )
     
     metrics = trainer._train_epoch()
@@ -205,7 +205,7 @@ def test_validate_epoch(trainer_components, temp_output_dir, device):
         optimizer=trainer_components['optimizer'],
         device=device,
         output_dir=temp_output_dir,
-        use_wandb=False
+        use_swanlab=False
     )
     
     metrics = trainer._validate_epoch()
@@ -223,7 +223,7 @@ def test_full_training_loop(trainer_components, temp_output_dir, device):
         scheduler=trainer_components['scheduler'],
         device=device,
         output_dir=temp_output_dir,
-        use_wandb=False,
+        use_swanlab=False,
         max_epochs=2,
         checkpoint_interval=1,
         eval_interval=1

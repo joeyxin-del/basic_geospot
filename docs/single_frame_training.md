@@ -132,8 +132,8 @@ device: "auto"
 
 # 日志配置
 logging:
-  use_wandb: false
-  wandb_project: "spotgeo-singleframe"
+  use_swanlab: false
+  swanlab_project: "spotgeo-singleframe"
 
 # 其他配置
 seed: 42
@@ -156,12 +156,12 @@ seed: 42
 #### 1. 标准配置 (`configs/singleframe_train.yaml`)
 - 适用于一般训练场景
 - 平衡的批次大小和训练参数
-- 关闭wandb记录
+- 关闭swanlab记录
 
 #### 2. GPU优化配置 (`configs/singleframe_gpu.yaml`)
 - 适用于GPU内存充足的情况
 - 更大的批次大小和学习率
-- 启用wandb记录
+- 启用swanlab记录
 - 使用余弦学习率调度
 
 #### 3. 调试配置 (`configs/singleframe_debug.yaml`)
@@ -199,8 +199,8 @@ seed: 42
 
 ### 其他参数
 - `device`: 训练设备 (cuda/cpu/auto, 默认: auto)
-- `logging.use_wandb`: 是否使用wandb记录
-- `logging.wandb_project`: wandb项目名称
+- `logging.use_swanlab`: 是否使用swanlab记录
+- `logging.swanlab_project`: swanlab项目名称
 - `seed`: 随机种子 (默认: 42)
 
 ## 高级用法示例
@@ -223,8 +223,8 @@ output:
   experiment_name: "my_custom_experiment"
 
 logging:
-  use_wandb: true
-  wandb_project: "my-project"
+  use_swanlab: true
+  swanlab_project: "my-project"
 ```
 
 ### 2. 使用配置文件进行实验管理

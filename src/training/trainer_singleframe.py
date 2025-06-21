@@ -12,13 +12,13 @@ from torch.optim.lr_scheduler import _LRScheduler
 from PIL import Image
 from tqdm import tqdm
 
-# 可选导入wandb
+# 可选导入swanlab
 try:
-    import wandb
-    WANDB_AVAILABLE = True
+    import swanlab
+    SWANLAB_AVAILABLE = True
 except ImportError:
-    WANDB_AVAILABLE = False
-    print("Warning: wandb not available, logging will be disabled")
+    SWANLAB_AVAILABLE = False
+    print("Warning: swanlab not available, logging will be disabled")
 
 from src.utils import get_logger
 from src.utils.evaluator import Evaluator
@@ -30,7 +30,7 @@ logger = get_logger('trainer_singleframe')
 class TrainerSingleFrame:
     """
     单帧训练器类，负责单帧模型训练和验证的核心功能。
-    支持断点续训、wandb集成和实验管理。
+    支持断点续训、swanlab集成和实验管理。
     """
     def __init__(
         self,
@@ -43,9 +43,9 @@ class TrainerSingleFrame:
         device: str = 'cuda' if torch.cuda.is_available() else 'cpu',
         output_dir: str = 'outputs',
         experiment_name: Optional[str] = None,
-        use_wandb: bool = False,  # 默认设置为False
-        wandb_project: str = 'spotgeo-singleframe',
-        wandb_mode: str = 'offline',  # 默认设置为offline模式
+        use_swanlab: bool = False,  # 默认设置为False
+        swanlab_project: str = 'spotgeo-singleframe',
+        swanlab_mode: str = 'cloud',  # 默认设置为offline模式
         checkpoint_interval: int = 10,
         eval_interval: int = 1,
         max_epochs: int = 100,
@@ -67,9 +67,9 @@ class TrainerSingleFrame:
             device: 训练设备
             output_dir: 输出目录
             experiment_name: 实验名称（可选，默认使用时间戳）
-            use_wandb: 是否使用wandb
-            wandb_project: wandb项目名称
-            wandb_mode: wandb模式 ('online', 'offline', 'disabled')
+            use_swanlab: 是否使用swanlab
+            swanlab_project: swanlab项目名称
+            swanlab_mode: swanlab模式 ('online', 'offline', 'disabled')
             checkpoint_interval: 检查点保存间隔（epoch）
             eval_interval: 验证间隔（epoch）
             max_epochs: 最大训练轮数
@@ -115,17 +115,17 @@ class TrainerSingleFrame:
         self.conf_thresh = conf_thresh
         self.topk = topk
         
-        # wandb集成
-        self.use_wandb = use_wandb and WANDB_AVAILABLE
-        if self.use_wandb:
-            # 设置wandb模式
-            os.environ["WANDB_MODE"] = wandb_mode
+        # swanlab集成
+        self.use_swanlab = use_swanlab and SWANLAB_AVAILABLE
+        if self.use_swanlab:
+            # 设置swanlab模式
+            os.environ["SWANLAB_MODE"] = swanlab_mode
             
             try:
-                wandb.init(
-                    project=wandb_project,
+                swanlab.init(
+                    project=swanlab_project,
                     name=self.experiment_name,
-                    mode=wandb_mode,
+                    mode=swanlab_mode,
                     config={
                         'model': model.__class__.__name__,
                         'optimizer': optimizer.__class__.__name__,
@@ -139,13 +139,13 @@ class TrainerSingleFrame:
                         'training_mode': 'single_frame'
                     }
                 )
-                wandb.watch(model)
-                logger.info(f"WandB初始化成功，模式: {wandb_mode}")
+                swanlab.watch(model)
+                logger.info(f"SwanLab初始化成功，模式: {swanlab_mode}")
             except Exception as e:
-                logger.warning(f"WandB初始化失败: {e}, 将继续训练但不记录到wandb")
-                self.use_wandb = False
-        elif use_wandb and not WANDB_AVAILABLE:
-            logger.warning("wandb不可用，已禁用wandb日志记录")
+                logger.warning(f"SwanLab初始化失败: {e}, 将继续训练但不记录到swanlab")
+                self.use_swanlab = False
+        elif use_swanlab and not SWANLAB_AVAILABLE:
+            logger.warning("swanlab不可用，已禁用swanlab日志记录")
         
         # 恢复训练
         if resume:
@@ -441,7 +441,7 @@ class TrainerSingleFrame:
         1. 训练和验证
         2. 检查点保存
         3. 早停
-        4. wandb日志记录
+        4. swanlab日志记录
         """
         logger.info(f"Starting single-frame training for {self.max_epochs} epochs")
         logger.info(f"Training device: {self.device}")
@@ -492,12 +492,12 @@ class TrainerSingleFrame:
                 }
                 metrics_training.append(metrics)
                 
-                # 记录到wandb
-                if self.use_wandb and WANDB_AVAILABLE:
+                # 记录到swanlab
+                if self.use_swanlab and SWANLAB_AVAILABLE:
                     try:
-                        wandb.log(metrics)
+                        swanlab.log(metrics)
                     except Exception as e:
-                        logger.warning(f"WandB日志记录失败: {e}")
+                        logger.warning(f"SwanLab日志记录失败: {e}")
                 
                 # 更新进度条后缀信息
                 epoch_pbar.set_postfix({
@@ -559,12 +559,12 @@ class TrainerSingleFrame:
                 
         # 训练结束
         logger.info("Single-frame training completed")
-        if self.use_wandb and WANDB_AVAILABLE:
+        if self.use_swanlab and SWANLAB_AVAILABLE:
             try:
-                wandb.finish()
-                logger.info("WandB会话已结束")
+                swanlab.finish()
+                logger.info("SwanLab会话已结束")
             except Exception as e:
-                logger.warning(f"WandB结束时出现错误: {e}")
+                logger.warning(f"SwanLab结束时出现错误: {e}")
             
         # 保存最终结果
         results = {

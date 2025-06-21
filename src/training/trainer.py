@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Union, Any, Tuple
 import numpy as np
 import torch
 import torch.nn as nn
-import wandb
+import swanlab
 from torch.utils.data import DataLoader
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import _LRScheduler
@@ -23,7 +23,7 @@ logger = get_logger('trainer')
 class Trainer:
     """
     训练器类，负责模型训练和验证的核心功能。
-    支持断点续训、wandb集成和实验管理。
+    支持断点续训、swanlab集成和实验管理。
     """
     def __init__(
         self,
@@ -36,8 +36,8 @@ class Trainer:
         device: str = 'cuda' if torch.cuda.is_available() else 'cpu',
         output_dir: str = 'outputs',
         experiment_name: Optional[str] = None,
-        use_wandb: bool = True,
-        wandb_project: str = 'spotgeo',
+        use_swanlab: bool = True,
+        swanlab_project: str = 'spotgeo',
         checkpoint_interval: int = 10,
         eval_interval: int = 1,
         max_epochs: int = 100,
@@ -57,8 +57,8 @@ class Trainer:
             device: 训练设备
             output_dir: 输出目录
             experiment_name: 实验名称（可选，默认使用时间戳）
-            use_wandb: 是否使用wandb
-            wandb_project: wandb项目名称
+            use_swanlab: 是否使用swanlab
+            swanlab_project: swanlab项目名称
             checkpoint_interval: 检查点保存间隔（epoch）
             eval_interval: 验证间隔（epoch）
             max_epochs: 最大训练轮数
@@ -98,11 +98,11 @@ class Trainer:
         self.best_epoch = 0
         self.patience_counter = 0
         
-        # wandb集成
-        self.use_wandb = use_wandb
-        if use_wandb:
-            wandb.init(
-                project=wandb_project,
+        # swanlab集成
+        self.use_swanlab = use_swanlab
+        if use_swanlab:
+            swanlab.init(
+                project=swanlab_project,
                 name=self.experiment_name,
                 config={
                     'model': model.__class__.__name__,
@@ -116,7 +116,7 @@ class Trainer:
                     'early_stopping_patience': early_stopping_patience
                 }
             )
-            wandb.watch(model)
+            swanlab.watch(model)
         
         # 恢复训练
         if resume:
@@ -417,7 +417,7 @@ class Trainer:
         1. 训练和验证
         2. 检查点保存
         3. 早停
-        4. wandb日志记录
+        4. swanlab日志记录
         """
         logger.info(f"Starting training for {self.max_epochs} epochs")
         logger.info(f"Training device: {self.device}")
@@ -468,9 +468,9 @@ class Trainer:
                 }
                 metrics_trainning.append(metrics)
                 
-                # 记录到wandb
-                if self.use_wandb:
-                    wandb.log(metrics)
+                # 记录到swanlab
+                if self.use_swanlab:
+                    swanlab.log(metrics)
                 
                 # 更新进度条后缀信息
                 epoch_pbar.set_postfix({
@@ -532,8 +532,8 @@ class Trainer:
                 
         # 训练结束
         logger.info("Training completed")
-        if self.use_wandb:
-            wandb.finish()
+        if self.use_swanlab:
+            swanlab.finish()
             
         # 保存最终结果
         results = {
