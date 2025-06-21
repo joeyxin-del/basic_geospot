@@ -131,6 +131,7 @@ class ClassificationLoss(BaseLoss):
             )
         elif self.loss_type == 'binary':
             pos_weight = self.config.get('pos_weight', None)
+            print(f"pos_weight: {pos_weight}")
             if pos_weight is not None:
                 pos_weight = torch.tensor(pos_weight)
             self.loss_fn = BinaryCrossEntropyLoss(

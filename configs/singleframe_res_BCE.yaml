@@ -1,0 +1,95 @@
+# SpotGEO 残差backbone单帧训练配置文件
+# 使用方法: python scripts/train_singleframe.py --config configs/singleframe_res.yaml
+
+# ================================
+# 数据配置
+# ================================
+data:
+  train_dir: "datasets/SpotGEOv2/train"           # 训练数据目录路径
+  train_anno: "datasets/SpotGEOv2/train_anno.json"  # 训练标注文件路径
+  val_dir: "datasets/SpotGEOv2/test"               # 验证数据目录路径（使用test数据）
+  val_anno: "datasets/SpotGEOv2/test_anno.json"   # 验证标注文件路径
+
+# ================================
+# 模型配置
+# ================================
+model:
+  name: "spotgeo_res"              # 残差backbone模型名称
+  config:                          # 模型特定配置
+    # 残差网络配置
+    backbone_type: "resnet"        # 骨干网络类型 (resnet/conv)
+    res_block_type: "basic"        # 残差块类型 (basic/bottleneck)
+    res_blocks_per_layer: [2, 2, 2, 2]  # 每层残差块数量
+    
+    # 网络结构配置
+    backbone_channels: [64, 128, 256, 512]  # 骨干网络通道数
+    detection_channels: [256, 128, 64]      # 检测头通道数
+    num_classes: 1                  # 类别数量
+    
+    # 模型优化配置
+    use_bn: true                   # 是否使用批归一化
+    dropout: 0.1                   # Dropout比率
+    scale_factor: 0.25             # 模型缩放因子（减少参数量）
+    
+    # 损失函数配置
+    loss:
+      cls_weight: 1.0              # 分类损失权重
+      reg_weight: 1.0              # 回归损失权重
+      cls_config:                  # 分类损失配置
+        loss_type: "binary"         # 损失类型：focal 或 binary
+        alpha: 0.25                # Focal Loss 的 alpha 参数（平衡正负样本）
+        gamma: 2.0                 # Focal Loss 的 gamma 参数（聚焦参数）
+        reduction: "none"          # 损失归约方式
+        pos_weight: 10.0            # 正样本权重
+      reg_config:                  # 回归损失配置
+        reduction: "none"          # 损失归约方式
+
+# ================================
+# 训练配置
+# ================================
+training:
+  # 基本训练参数
+  batch_size: 16                 # 批次大小（可根据GPU内存调整）
+  num_workers: 4                   # 数据加载器工作进程数
+  epochs: 400                     # 训练轮数
+  lr: 0.0001                       # 学习率
+  
+  # 优化器和调度器
+  optimizer: "adam"                # 优化器类型 (adam/sgd)
+  scheduler: "cosine"              # 学习率调度器 (step/cosine/none) - 使用cosine更适合残差网络
+  
+  # 训练控制
+  checkpoint_interval: 10          # 检查点保存间隔（epoch）
+  eval_interval: 5                 # 验证间隔（epoch）
+  early_stopping_patience: 20     # 早停耐心值（残差网络可能需要更多时间收敛）
+
+# ================================
+# 输出配置
+# ================================
+output:
+  output_dir: "outputs"            # 输出根目录
+  experiment_name: "singleframe_res_BCE"  # 实验名称
+
+# ================================
+# 设备配置
+# ================================
+device: "auto"                     # 训练设备 (auto/cuda/cpu)
+
+# ================================
+# 日志配置
+# ================================
+logging:
+  use_wandb: false                 # 是否使用wandb记录
+  wandb_project: "spotgeo-singleframe-res"  # wandb项目名称
+
+# ================================
+# 后处理配置
+# ================================
+postprocessing:
+  conf_thresh: 0.1                 # 置信度阈值
+  topk: 100                       # 保留的top-k预测
+
+# ================================
+# 其他配置
+# ================================
+seed: 42                          # 随机种子 
