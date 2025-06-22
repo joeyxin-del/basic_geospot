@@ -70,6 +70,9 @@ class SpotGEOModelResPretrained(BaseModel):
         # 移除最后的全连接层和平均池化层
         self.backbone = nn.Sequential(*list(self.backbone.children())[:-2])
         
+        # 将backbone设置为eval模式
+        self.backbone.eval()
+        
         # 检测头
         self.detection_head = nn.ModuleList()
         in_channels = 512  # ResNet18最后一层的通道数
@@ -189,7 +192,9 @@ class SpotGEOModelResPretrained(BaseModel):
             
         # 提取特征
         features = []
-        x = self.backbone(x)
+        # 使用no_grad处理backbone部分
+        with torch.no_grad():
+            x = self.backbone(x)
         features.append(x)
             
         # 检测头
