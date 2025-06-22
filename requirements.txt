@@ -13,7 +13,7 @@ hydra-core>=1.3.0
 omegaconf>=2.3.0
 
 # 实验跟踪
-swanlab>=0.15.0
+swanlab
 
 # 数据验证
 pydantic>=2.0.0
@@ -43,3 +43,6 @@ protobuf>=4.0.0
 
 # 类型检查
 typing-extensions>=4.0.0 
+
+torchinfo
+thop
