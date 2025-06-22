@@ -1,0 +1,92 @@
+# SpotGEO 预训练ResNet18单帧训练配置文件
+# 使用方法: python scripts/train_singleframe.py --config configs/singleframe_res_pretrained_BCE.yaml
+
+# ================================
+# 数据配置
+# ================================
+data:
+  train_dir: "datasets/SpotGEOv2/train"           # 训练数据目录路径
+  train_anno: "datasets/SpotGEOv2/train_anno.json"  # 训练标注文件路径
+  val_dir: "datasets/SpotGEOv2/test"               # 验证数据目录路径（使用test数据）
+  val_anno: "datasets/SpotGEOv2/test_anno.json"   # 验证标注文件路径
+
+# ================================
+# 模型配置
+# ================================
+model:
+  name: "spotgeo_res_pretrained"    # 使用预训练ResNet18的模型名称
+  config:                           # 模型特定配置
+    # 检测头配置
+    detection_channels: [256, 128, 64]  # 检测头通道数
+    num_classes: 1                      # 类别数量
+    
+    # 模型优化配置
+    use_bn: true                       # 是否使用批归一化
+    dropout: 0.1                       # Dropout比率
+    scale_factor: 0.25                 # 模型缩放因子（减少参数量）
+    
+    # 损失函数配置
+    loss:
+      cls_weight: 1.0                  # 分类损失权重
+      reg_weight: 1.0                  # 回归损失权重
+      cls_config:                      # 分类损失配置
+        loss_type: "binary"            # 损失类型：binary
+        alpha: 0.25                    # Focal Loss 的 alpha 参数
+        gamma: 2.0                     # Focal Loss 的 gamma 参数
+        reduction: "none"              # 损失归约方式
+        pos_weight: 10.0               # 正样本权重
+      reg_config:                      # 回归损失配置
+        reduction: "none"              # 损失归约方式
+
+# ================================
+# 训练配置
+# ================================
+training:
+  # 基本训练参数
+  batch_size: 2                      # 批次大小（由于只训练检测头，可以用更大的批次）
+  num_workers: 4                      # 数据加载器工作进程数
+  epochs: 200                         # 训练轮数（由于使用预训练模型，可以减少轮数）
+  lr: 0.0001                         # 学习率（只训练检测头，可以用更大的学习率）
+  
+  # 优化器和调度器
+  optimizer: "adam"                   # 优化器类型 (adam)
+  scheduler: "cosine"                 # 学习率调度器 (cosine)
+  
+  # 训练控制
+  checkpoint_interval: 5              # 检查点保存间隔（epoch）
+  eval_interval: 2                    # 验证间隔（epoch）
+  early_stopping_patience: 15         # 早停耐心值
+
+# ================================
+# 输出配置
+# ================================
+output:
+  output_dir: "outputs"               # 输出根目录
+  experiment_name: "singleframe_res_pretrained_BCE"  # 实验名称
+
+# ================================
+# 设备配置
+# ================================
+device: "auto"                        # 训练设备 (auto/cuda/cpu)
+
+# ================================
+# 日志配置
+# ================================
+logging:
+  use_swanlab: True                   # 是否使用swanlab记录
+  swanlab_project: "spotgeo-singleframe-res-pretrained"  # swanlab项目名称
+  swanlab_mode: "cloud"               # swanlab模式
+  log_batch_metrics: True             # 是否记录每个batch的指标
+  log_gradients: True                 # 是否记录梯度信息
+
+# ================================
+# 后处理配置
+# ================================
+postprocessing:
+  conf_thresh: 0.1                    # 置信度阈值
+  topk: 100                          # 保留的top-k预测
+
+# ================================
+# 其他配置
+# ================================
+seed: 42                             # 随机种子 
