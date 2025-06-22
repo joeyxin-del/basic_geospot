@@ -43,7 +43,7 @@ class TrainerSingleFrame:
         device: str = 'cuda' if torch.cuda.is_available() else 'cpu',
         output_dir: str = 'outputs',
         experiment_name: Optional[str] = None,
-        use_swanlab: bool = False,  # 默认设置为False
+        use_swanlab: bool = True,  # 默认设置为False
         swanlab_project: str = 'spotgeo-singleframe',
         swanlab_mode: str = 'cloud',  # 默认设置为offline模式
         checkpoint_interval: int = 10,
@@ -52,7 +52,10 @@ class TrainerSingleFrame:
         early_stopping_patience: int = 10,
         resume: Optional[str] = None,
         conf_thresh: float = 0.5,  # 添加置信度阈值参数
-        topk: int = 100            # 添加topk参数
+        topk: int = 100,           # 添加topk参数
+        log_epoch_metrics: bool = True,  # 是否记录每个epoch的指标  
+        log_batch_metrics: bool = True,  # 是否记录每个batch的指标
+        log_gradients: bool = True       # 是否记录梯度信息
     ):
         """
         初始化单帧训练器。
@@ -77,6 +80,8 @@ class TrainerSingleFrame:
             resume: 恢复训练的检查点路径（可选）
             conf_thresh: 置信度阈值
             topk: topk参数
+            log_batch_metrics: 是否记录每个batch的指标
+            log_gradients: 是否记录梯度信息
         """
         self.model = model.to(device)
         self.train_loader = train_loader
@@ -88,16 +93,71 @@ class TrainerSingleFrame:
         
         # 实验管理
         self.experiment_name = experiment_name or datetime.now().strftime("%Y%m%d_%H%M%S_singleframe")
-        self.output_dir = os.path.join(output_dir, self.experiment_name)
+        self.output_dir = os.path.join(output_dir, self.experiment_name, datetime.now().strftime("%Y%m%d_%H%M%S"))
         os.makedirs(self.output_dir, exist_ok=True)
         os.makedirs(os.path.join(self.output_dir, 'checkpoints'), exist_ok=True)
         os.makedirs(os.path.join(self.output_dir, 'plots'), exist_ok=True)
+        os.makedirs(os.path.join(self.output_dir, 'configs'), exist_ok=True)  # 添加configs目录
+        
+        # 保存训练配置
+        config = {
+            'experiment_name': self.experiment_name,
+            'model': {
+                'name': model.__class__.__name__,
+                'num_parameters': sum(p.numel() for p in model.parameters())
+            },
+            'optimizer': {
+                'name': optimizer.__class__.__name__,
+                'lr': optimizer.param_groups[0]['lr'],
+                'params': {k: v for k, v in optimizer.defaults.items()}
+            },
+            'scheduler': {
+                'name': scheduler.__class__.__name__ if scheduler else None,
+                'params': scheduler.state_dict() if scheduler else None
+            },
+            'criterion': criterion.__class__.__name__ if criterion else None,
+            'device': device,
+            'training': {
+                'max_epochs': max_epochs,
+                'checkpoint_interval': checkpoint_interval,
+                'eval_interval': eval_interval,
+                'early_stopping_patience': early_stopping_patience,
+                'conf_thresh': conf_thresh,
+                'topk': topk,
+            },
+            'logging': {
+                'use_swanlab': use_swanlab,
+                'swanlab_project': swanlab_project,
+                'swanlab_mode': swanlab_mode,
+                'log_epoch_metrics': log_epoch_metrics,
+                'log_batch_metrics': log_batch_metrics,
+                'log_gradients': log_gradients
+            },
+            'dataloaders': {
+                'train_batch_size': train_loader.batch_size,
+                'val_batch_size': val_loader.batch_size,
+                'train_num_workers': train_loader.num_workers,
+                'val_num_workers': val_loader.num_workers,
+            }
+        }
+        
+        # 保存配置到YAML文件
+        import yaml
+        config_path = os.path.join(self.output_dir, 'configs', 'train_config.yaml')
+        with open(config_path, 'w') as f:
+            yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+        logger.info(f"训练配置已保存到: {config_path}")
         
         # 训练配置
         self.checkpoint_interval = checkpoint_interval
         self.eval_interval = eval_interval
         self.max_epochs = max_epochs
         self.early_stopping_patience = early_stopping_patience
+        
+        # SwanLab配置
+        self.log_batch_metrics = log_batch_metrics
+        self.log_gradients = log_gradients
+        self.log_epoch_metrics = log_epoch_metrics
         
         # 评估器
         self.evaluator = Evaluator(save_dir=os.path.join(self.output_dir, 'evaluations'))
@@ -110,6 +170,7 @@ class TrainerSingleFrame:
         self.best_score = float('inf')
         self.best_epoch = 0
         self.patience_counter = 0
+        self.global_step = 0  # 添加全局步数计数器
         
         # 后处理参数
         self.conf_thresh = conf_thresh
@@ -136,10 +197,13 @@ class TrainerSingleFrame:
                         'checkpoint_interval': checkpoint_interval,
                         'eval_interval': eval_interval,
                         'early_stopping_patience': early_stopping_patience,
-                        'training_mode': 'single_frame'
+                        'training_mode': 'single_frame',
+                        'log_batch_metrics': log_batch_metrics,
+                        'log_gradients': log_gradients,
+                        'conf_thresh': conf_thresh,
+                        'topk': topk
                     }
                 )
-                swanlab.watch(model)
                 logger.info(f"SwanLab初始化成功，模式: {swanlab_mode}")
             except Exception as e:
                 logger.warning(f"SwanLab初始化失败: {e}, 将继续训练但不记录到swanlab")
@@ -250,22 +314,54 @@ class TrainerSingleFrame:
             targets = self._create_target_tensors(labels, (out_h, out_w))
             targets = {k: v.to(self.device) for k, v in targets.items()}
 
-
             loss_dict = self.model.compute_loss(outputs, targets)
             loss = loss_dict['total_loss']
 
             # 反向传播
             loss.backward()
+            
+            # 计算梯度范数（如果启用）
+            grad_norm = None
+            if self.log_gradients:
+                grad_norm = self._get_gradient_norm()
+                
             self.optimizer.step()
 
             # 更新统计信息
             epoch_loss += loss.item()
+            self.global_step += 1
+            
+            # 记录每个batch的指标到SwanLab
+            if self.log_batch_metrics:
+                batch_metrics = {
+                    'batch_loss': loss.item(),
+                    'batch_lr': self.optimizer.param_groups[0]['lr'],
+                    'epoch': self.current_epoch + 1,
+                    'batch_idx': batch_idx + 1
+                }
+                
+                # 添加详细的损失组件
+                for loss_name, loss_value in loss_dict.items():
+                    if isinstance(loss_value, torch.Tensor):
+                        batch_metrics[f'batch_{loss_name}'] = loss_value.item()
+                
+                # 添加梯度信息
+                if grad_norm is not None:
+                    batch_metrics['batch_grad_norm'] = grad_norm
+                
+                # 记录到SwanLab
+                self._log_swanlab_metrics(batch_metrics, step=self.global_step)
             
             # 更新进度条显示
-            train_pbar.set_postfix({
+            postfix_dict = {
                 'Loss': f"{loss.item():.4f}",
                 'Avg Loss': f"{epoch_loss / (batch_idx + 1):.4f}"
-            })
+            }
+            
+            if grad_norm is not None:
+                postfix_dict['Grad Norm'] = f"{grad_norm:.4f}"
+                
+            train_pbar.set_postfix(postfix_dict)
             
         # 计算平均损失
         avg_loss = epoch_loss / len(self.train_loader)
@@ -355,7 +451,7 @@ class TrainerSingleFrame:
         )
         
         with torch.no_grad():
-            for batch in val_pbar:
+            for batch_idx, batch in enumerate(val_pbar):
                 # 准备数据 - 单帧格式
                 images = batch['image']  # torch.Tensor (已通过collate_fn转换)
                 labels = batch['label']  # List[Dict]
@@ -413,6 +509,23 @@ class TrainerSingleFrame:
                     predictions.append(pred_dict)
                     ground_truth.append(gt_dict)
                 
+                # 记录验证batch指标到SwanLab
+                if self.log_batch_metrics:
+
+                    val_batch_metrics = {
+                        'val_batch_loss': loss_dict['total_loss'].item(),
+                        'val_epoch': self.current_epoch + 1,
+                        'val_batch_idx': batch_idx + 1
+                    }
+                    
+                    # 添加详细的损失组件
+                    for loss_name, loss_value in loss_dict.items():
+                        if isinstance(loss_value, torch.Tensor):
+                            val_batch_metrics[f'val_batch_{loss_name}'] = loss_value.item()
+                    
+                    # 记录到SwanLab
+                    self._log_swanlab_metrics(val_batch_metrics, step=self.global_step + batch_idx)
+                
                 # 更新验证进度条
                 val_pbar.set_postfix({
                     'Loss': f"{loss_dict['total_loss'].item():.4f}"
@@ -433,6 +546,41 @@ class TrainerSingleFrame:
             'loss': avg_loss,
             **eval_results
         }
+        
+    def _log_swanlab_metrics(self, metrics: Dict[str, Any], step: Optional[int] = None):
+        """
+        记录指标到SwanLab。
+        
+        Args:
+            metrics: 要记录的指标字典
+            step: 步数（可选）
+        # """
+
+        if not self.use_swanlab or not SWANLAB_AVAILABLE:
+            return
+            
+        try:
+            if step is not None:
+                swanlab.log(metrics, step=step)
+            else:
+                swanlab.log(metrics)
+        except Exception as e:
+            logger.warning(f"SwanLab日志记录失败: {e}")
+            
+    def _get_gradient_norm(self) -> float:
+        """
+        计算模型参数的梯度范数。
+        
+        Returns:
+            梯度范数
+        """
+        total_norm = 0.0
+        for p in self.model.parameters():
+            if p.grad is not None:
+                param_norm = p.grad.data.norm(2)
+                total_norm += param_norm.item() ** 2
+        total_norm = total_norm ** (1. / 2)
+        return total_norm
         
     def train(self):
         """
@@ -466,6 +614,16 @@ class TrainerSingleFrame:
             # 训练一个epoch
             train_metrics = self._train_epoch()
             
+            # 记录每个epoch的训练指标
+            if self.log_epoch_metrics:
+                epoch_train_metrics = {
+                    'epoch': epoch + 1,
+                    'train_loss': train_metrics['loss'],
+                    'train_lr': train_metrics['lr'],
+                    'train_time': train_metrics['time']
+                }
+                self._log_swanlab_metrics(epoch_train_metrics, step=epoch + 1)
+            
             # 验证
             if (epoch + 1) % self.eval_interval == 0:
                 val_metrics = self._validate_epoch()
@@ -488,16 +646,37 @@ class TrainerSingleFrame:
                     'val_score': current_score,
                     'val_f1': val_metrics['f1_score'],
                     'val_mse': val_metrics['mse'],
-                    'lr': train_metrics['lr']
+                    'lr': train_metrics['lr'],
+                    'train_time': train_metrics['time'],
+                    'best_score': self.best_score,
+                    'patience_counter': self.patience_counter
                 }
                 metrics_training.append(metrics)
                 
                 # 记录到swanlab
-                if self.use_swanlab and SWANLAB_AVAILABLE:
-                    try:
-                        swanlab.log(metrics)
-                    except Exception as e:
-                        logger.warning(f"SwanLab日志记录失败: {e}")
+                if self.log_epoch_metrics:
+                    # 记录验证指标
+                    epoch_val_metrics = {
+                        'val_loss': val_metrics['loss'],
+                        'val_score': current_score,
+                        'val_f1': val_metrics['f1_score'],
+                        'val_mse': val_metrics['mse'],
+                        'best_score': self.best_score,
+                        'patience_counter': self.patience_counter
+                    }
+                    # 添加更多评估指标（如果存在）
+                    for key, value in val_metrics.items():
+                        if key not in ['loss', 'score', 'f1_score', 'mse']:
+                            epoch_val_metrics[f'val_{key}'] = value
+                            
+                    self._log_swanlab_metrics(epoch_val_metrics, step=epoch + 1)
+                    
+                    # 如果是最佳模型，记录特殊标记
+                    if current_score < self.best_score:
+                        self._log_swanlab_metrics({
+                            'best_model_epoch': epoch + 1,
+                            'best_model_score': current_score
+                        }, step=epoch + 1)
                 
                 # 更新进度条后缀信息
                 epoch_pbar.set_postfix({
@@ -561,6 +740,27 @@ class TrainerSingleFrame:
         logger.info("Single-frame training completed")
         if self.use_swanlab and SWANLAB_AVAILABLE:
             try:
+                # 记录训练总结
+                final_metrics = {
+                    'final_best_epoch': self.best_epoch + 1,
+                    'final_best_score': self.best_score,
+                    'final_total_epochs': epoch + 1,
+                    'final_training_mode': 'single_frame',
+                    'final_experiment_name': self.experiment_name
+                }
+                
+                # 如果有训练指标，记录最终统计
+                if metrics_training:
+                    final_metrics.update({
+                        'final_avg_train_loss': np.mean([m['train_loss'] for m in metrics_training]),
+                        'final_avg_val_loss': np.mean([m['val_loss'] for m in metrics_training]),
+                        'final_avg_val_f1': np.mean([m['val_f1'] for m in metrics_training]),
+                        'final_best_val_f1': max([m['val_f1'] for m in metrics_training]),
+                        'final_total_training_time': sum([m['train_time'] for m in metrics_training])
+                    })
+                
+                self._log_swanlab_metrics(final_metrics)
+                
                 swanlab.finish()
                 logger.info("SwanLab会话已结束")
             except Exception as e:
@@ -575,6 +775,7 @@ class TrainerSingleFrame:
         }
         with open(os.path.join(self.output_dir, 'results.json'), 'w') as f:
             json.dump(results, f, indent=4)
+        
             
         return results
 

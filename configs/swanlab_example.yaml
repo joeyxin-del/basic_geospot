@@ -1,0 +1,62 @@
+# SwanLab集成配置示例
+# 用于单帧训练器的SwanLab实验管理
+
+# 基本训练配置
+training:
+  max_epochs: 100
+  eval_interval: 1
+  checkpoint_interval: 10
+  early_stopping_patience: 10
+  device: "cuda"  # 或 "cpu"
+  
+# SwanLab配置
+swanlab:
+  enabled: true  # 是否启用SwanLab
+  project: "spotgeo-singleframe"  # 项目名称
+  mode: "cloud"  # 模式: "cloud", "offline", "local", "disabled"
+  log_batch_metrics: true  # 是否记录每个batch的指标
+  log_gradients: true      # 是否记录梯度信息
+  
+# 模型配置
+model:
+  name: "SpotGeoRes"
+  backbone: "resnet18"
+  pretrained: true
+  num_classes: 1
+  
+# 优化器配置
+optimizer:
+  name: "Adam"
+  lr: 0.0001
+  weight_decay: 0.0001
+  
+# 调度器配置
+scheduler:
+  name: "StepLR"
+  step_size: 20
+  gamma: 0.5
+  
+# 数据配置
+data:
+  batch_size: 8
+  num_workers: 4
+  input_size: [640, 480]
+  
+# 后处理配置
+postprocessing:
+  conf_thresh: 0.5
+  topk: 100
+  
+# 实验管理
+experiment:
+  name: null  # 自动生成时间戳名称
+  output_dir: "outputs"
+  
+# 数据增强配置
+augmentation:
+  enabled: true
+  transforms:
+    - "flip"
+    - "rotate"
+    - "color_jitter"
+  normalize: true 

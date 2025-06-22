@@ -79,8 +79,11 @@ device: "auto"                     # 训练设备 (auto/cuda/cpu)
 # 日志配置
 # ================================
 logging:
-  use_swanlab: true                 # 是否使用swanlab记录
+  use_swanlab: True                 # 是否使用swanlab记录
   swanlab_project: "spotgeo-singleframe-res"  # swanlab项目名称
+  swanlab_mode: "cloud"             # swanlab模式: "cloud" (在线), "offline" (离线), "local" (本地)
+  log_batch_metrics: True  # 是否记录每个batch的指标
+  log_gradients: True      # 是否记录梯度信息
 
 # ================================
 # 后处理配置

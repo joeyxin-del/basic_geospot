@@ -224,7 +224,8 @@ def get_final_config(args) -> Dict[str, Any]:
         'device': 'auto',
         'logging': {
             'use_swanlab': False,
-            'swanlab_project': 'spotgeo-singleframe'
+            'swanlab_project': 'spotgeo-singleframe',
+            'swanlab_mode': 'cloud'
         },
         'seed': 42,
         'resume': None,
@@ -523,7 +524,7 @@ def main():
         experiment_name=output_config['experiment_name'],
         use_swanlab=logging_config['use_swanlab'],
         swanlab_project=logging_config['swanlab_project'],
-        swanlab_mode='cloud',  # 固定为offline模式 offline
+        swanlab_mode=logging_config['swanlab_mode'],
         checkpoint_interval=training_config['checkpoint_interval'],
         eval_interval=training_config['eval_interval'],
         max_epochs=training_config['epochs'],
