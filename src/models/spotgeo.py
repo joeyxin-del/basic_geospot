@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from PIL import Image
-from utils import get_logger
+from ..utils import get_logger
 
 from .base import BaseModel
 

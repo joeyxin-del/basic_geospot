@@ -5,10 +5,10 @@
 # 数据配置
 # ================================
 data:
-  train_dir: "datasets/SpotGEOv2/train"           # 训练数据目录路径
-  train_anno: "datasets/SpotGEOv2/train_anno.json"  # 训练标注文件路径
-  val_dir: "datasets/SpotGEOv2/test"               # 验证数据目录路径（使用test数据）
-  val_anno: "datasets/SpotGEOv2/test_anno.json"   # 验证标注文件路径
+  train_dir: "../autodl-fs/SpotGEOv2/train"           # 训练数据目录路径
+  train_anno: "../autodl-fs/SpotGEOv2/train_anno.json"  # 训练标注文件路径
+  val_dir: "../autodl-fs/SpotGEOv2/test"               # 验证数据目录路径（使用test数据）
+  val_anno: "../autodl-fs/SpotGEOv2/test_anno.json"   # 验证标注文件路径
 
 # ================================
 # 模型配置
