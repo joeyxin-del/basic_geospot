@@ -267,16 +267,18 @@ def create_optimizer(model: nn.Module, optimizer_type: str, lr: float) -> torch.
     else:
         raise ValueError(f"不支持的优化器类型: {optimizer_type}")
 
-def create_scheduler(optimizer: torch.optim.Optimizer, scheduler_type: str, epochs: int):
+def create_scheduler(optimizer: torch.optim.Optimizer, scheduler_type: str, scheduler_config: dict = None):
     """创建学习率调度器"""
-    if scheduler_type == 'step':
-        return StepLR(optimizer, step_size=30, gamma=0.1)
-    elif scheduler_type == 'cosine':
-        return CosineAnnealingLR(optimizer, T_max=epochs)
-    elif scheduler_type == 'none':
+    from src.schedulers import SchedulerFactory
+    
+    if scheduler_type == 'none':
         return None
-    else:
-        raise ValueError(f"不支持的调度器类型: {scheduler_type}")
+    
+    return SchedulerFactory.create(
+        name=scheduler_type,
+        optimizer=optimizer,
+        config=scheduler_config
+    )
 
 def validate_config(config: Dict[str, Any]) -> None:
     """验证配置的有效性"""
@@ -497,11 +499,13 @@ def main():
     logger.info(f"模型计算量(FLOPs): {format_size(flops)}FLOPs")
     logger.info(f"模型参数量(Params): {format_size(params)}") 
     
-    # 创建优化器
+    # 创建优化器和学习率调度器
     optimizer = create_optimizer(model, training_config['optimizer'], training_config['lr'])
-    
-    # 创建学习率调度器
-    scheduler = create_scheduler(optimizer, training_config['scheduler'], training_config['epochs'])
+    scheduler = create_scheduler(
+        optimizer=optimizer,
+        scheduler_type=training_config['scheduler'],
+        scheduler_config=training_config.get('scheduler_config')
+    )
     
     # 创建训练器
     logger.info("创建训练器...")
