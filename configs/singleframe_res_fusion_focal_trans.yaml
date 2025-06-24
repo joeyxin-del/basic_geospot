@@ -5,14 +5,14 @@
 # 数据配置
 # ================================
 data:
-  # train_dir: "../autodl-fs/SpotGEOv2/train"           # 训练数据目录路径
-  # train_anno: "../autodl-fs/SpotGEOv2/train_anno.json"  # 训练标注文件路径
-  # val_dir: "../autodl-fs/SpotGEOv2/test"               # 验证数据目录路径（使用test数据）
-  # val_anno: "../autodl-fs/SpotGEOv2/test_anno.json"   # 验证标注文件路径
-  train_dir: "datasets/SpotGEOv2/train"
-  train_anno: "datasets/SpotGEOv2/train_anno.json"
-  val_dir: "datasets/SpotGEOv2/test"
-  val_anno: "datasets/SpotGEOv2/test_anno.json"
+  train_dir: "../autodl-fs/SpotGEOv2/train"           # 训练数据目录路径
+  train_anno: "../autodl-fs/SpotGEOv2/train_anno.json"  # 训练标注文件路径
+  val_dir: "../autodl-fs/SpotGEOv2/test"               # 验证数据目录路径（使用test数据）
+  val_anno: "../autodl-fs/SpotGEOv2/test_anno.json"   # 验证标注文件路径
+  # train_dir: "datasets/SpotGEOv2/train"
+  # train_anno: "datasets/SpotGEOv2/train_anno.json"
+  # val_dir: "datasets/SpotGEOv2/test"
+  # val_anno: "datasets/SpotGEOv2/test_anno.json"
 # ================================
 # 数据增强配置
 # ================================
@@ -38,7 +38,7 @@ model:
     # 多尺度检测头配置
     multi_scale_detection:
       enabled: true                # 是否启用多尺度检测
-      fpn_channels: 128           # FPN特征通道数（修改为缩放后的通道数）
+      fpn_channels: 64          # FPN特征通道数（修改为缩放后的通道数）
       scales: ["p2", "p3", "p4"]  # 使用的特征层级
       scale_weights: [1.2, 1.0, 0.8]  # 不同尺度的损失权重
     
@@ -52,7 +52,7 @@ model:
       cls_weight: 1.0              # 分类损失权重
       reg_weight: 1.0              # 回归损失权重
       cls_config:                  # 分类损失配置
-        loss_type: "binary"         # 损失类型：focal 或 binary
+        loss_type: "focal"         # 损失类型：focal 或 binary
         alpha: 0.75                # Focal Loss 的 alpha 参数（平衡正负样本）
         gamma: 1.5                 # Focal Loss 的 gamma 参数（聚焦参数）
         reduction: "none"          # 损失归约方式
@@ -65,7 +65,7 @@ model:
 # ================================
 training:
   # 基本训练参数
-  batch_size: 2                 # 批次大小（可根据GPU内存调整）
+  batch_size: 64                 # 批次大小（可根据GPU内存调整）
   num_workers: 4                   # 数据加载器工作进程数
   epochs: 800                     # 训练轮数
   lr: 0.0005                       # 学习率
@@ -74,7 +74,7 @@ training:
   optimizer: "adam"                # 优化器类型 (adam/sgd)
   scheduler: "cosine"                # 学习率调度器 (step/cosine/none)
   scheduler_config:                # 学习率调度器配置
-      T_max: 400
+      T_max: 600
       eta_min: 0.00001
   #  step_size: 50                  # 每隔多少个epoch降低学习率
   #  gamma: 0.5                     # 学习率衰减因子 
