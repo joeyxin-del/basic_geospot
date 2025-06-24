@@ -17,6 +17,7 @@ def get_model(name: str, config: Dict[str, Any] = None) -> BaseModel:
 
 # 导入模型以触发注册
 from .spotgeo import SpotGEOModel  # 导入SpotGEO模型
-from .spotgeo_res import SpotGEOModelRes  # 导入SpotGEO残差模型
+from .spotgeo_res import SpotGEOModelRes  # 导入SpotGEO残差模型 
+from .spotgeo_res_fusion import SpotGEOModelResFusion  # 导入SpotGEO残差融合模型
 
-__all__ = ['ModelFactory', 'list_models', 'get_model', 'SpotGEOModel', 'SpotGEOModelRes'] 
+__all__ = ['ModelFactory', 'list_models', 'get_model', 'SpotGEOModel', 'SpotGEOModelRes', 'SpotGEOModelResFusion'] 

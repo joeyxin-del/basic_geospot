@@ -438,7 +438,7 @@ class TrainerSingleFrame:
             包含验证指标的字典
         """
         self.model.eval()
-        val_loss = 0
+        # val_loss = 0  # 移除验证损失计算
         predictions = []
         ground_truth = []
         
@@ -475,9 +475,9 @@ class TrainerSingleFrame:
                 targets = self._create_target_tensors(labels, (out_h, out_w))
                 targets = {k: v.to(self.device) for k, v in targets.items()}
                 
-                # 计算损失
-                loss_dict = self.model.compute_loss(outputs, targets)
-                val_loss += loss_dict['total_loss'].item()
+                # 计算损失 - 移除验证损失计算
+                # loss_dict = self.model.compute_loss(outputs, targets)
+                # val_loss += loss_dict['total_loss'].item()
                 
                 # 使用后处理将热图转换为坐标列表
                 scale_x = 640 / out_w  # 原图宽度 / 热图宽度
@@ -509,30 +509,29 @@ class TrainerSingleFrame:
                     predictions.append(pred_dict)
                     ground_truth.append(gt_dict)
                 
-                # 记录验证batch指标到SwanLab
-                if self.log_batch_metrics:
-
-                    val_batch_metrics = {
-                        'val_batch_loss': loss_dict['total_loss'].item(),
-                        'val_epoch': self.current_epoch + 1,
-                        'val_batch_idx': batch_idx + 1
-                    }
-                    
-                    # 添加详细的损失组件
-                    for loss_name, loss_value in loss_dict.items():
-                        if isinstance(loss_value, torch.Tensor):
-                            val_batch_metrics[f'val_batch_{loss_name}'] = loss_value.item()
-                    
-                    # 记录到SwanLab
-                    self._log_swanlab_metrics(val_batch_metrics, step=self.global_step + batch_idx)
+                # 记录验证batch指标到SwanLab - 移除验证损失记录
+                # if self.log_batch_metrics:
+                #     val_batch_metrics = {
+                #         'val_batch_loss': loss_dict['total_loss'].item(),
+                #         'val_epoch': self.current_epoch + 1,
+                #         'val_batch_idx': batch_idx + 1
+                #     }
+                #     
+                #     # 添加详细的损失组件
+                #     for loss_name, loss_value in loss_dict.items():
+                #         if isinstance(loss_value, torch.Tensor):
+                #             val_batch_metrics[f'val_batch_{loss_name}'] = loss_value.item()
+                #     
+                #     # 记录到SwanLab
+                #     self._log_swanlab_metrics(val_batch_metrics, step=self.global_step + batch_idx)
                 
-                # 更新验证进度条
-                val_pbar.set_postfix({
-                    'Loss': f"{loss_dict['total_loss'].item():.4f}"
-                })
+                # 更新验证进度条 - 移除损失显示
+                # val_pbar.set_postfix({
+                #     'Loss': f"{loss_dict['total_loss'].item():.4f}"
+                # })
                     
-        # 计算平均损失
-        avg_loss = val_loss / len(self.val_loader)
+        # 计算平均损失 - 移除验证损失计算
+        # avg_loss = val_loss / len(self.val_loader)
         
         # 评估预测结果
         eval_results = self.evaluator.evaluate(
@@ -543,7 +542,7 @@ class TrainerSingleFrame:
         )
         
         return {
-            'loss': avg_loss,
+            # 'loss': avg_loss,  # 移除验证损失
             **eval_results
         }
         
@@ -642,7 +641,6 @@ class TrainerSingleFrame:
                 metrics = {
                     'epoch': epoch + 1,
                     'train_loss': train_metrics['loss'],
-                    'val_loss': val_metrics['loss'],
                     'val_score': current_score,
                     'val_f1': val_metrics['f1_score'],
                     'val_mse': val_metrics['mse'],
@@ -657,7 +655,6 @@ class TrainerSingleFrame:
                 if self.log_epoch_metrics:
                     # 记录验证指标
                     epoch_val_metrics = {
-                        'val_loss': val_metrics['loss'],
                         'val_score': current_score,
                         'val_f1': val_metrics['f1_score'],
                         'val_mse': val_metrics['mse'],
@@ -666,7 +663,7 @@ class TrainerSingleFrame:
                     }
                     # 添加更多评估指标（如果存在）
                     for key, value in val_metrics.items():
-                        if key not in ['loss', 'score', 'f1_score', 'mse']:
+                        if key not in ['score', 'f1_score', 'mse']:  # 移除'loss'检查
                             epoch_val_metrics[f'val_{key}'] = value
                             
                     self._log_swanlab_metrics(epoch_val_metrics, step=epoch + 1)
@@ -681,7 +678,6 @@ class TrainerSingleFrame:
                 # 更新进度条后缀信息
                 epoch_pbar.set_postfix({
                     'Train Loss': f"{train_metrics['loss']:.4f}",
-                    'Val Loss': f"{val_metrics['loss']:.4f}",
                     'Val F1': f"{val_metrics['f1_score']:.4f}",
                     'Best F1': f"{1 - self.best_score:.4f}"
                 })
@@ -690,7 +686,6 @@ class TrainerSingleFrame:
                 logger.info(
                     f"Epoch {epoch + 1}/{self.max_epochs} - "
                     f"Train Loss: {train_metrics['loss']:.4f} - "
-                    f"Val Loss: {val_metrics['loss']:.4f} - "
                     f"Val Score: {current_score:.4f} - "
                     f"Val F1: {val_metrics['f1_score']:.4f} - "
                     f"Val MSE: {val_metrics['mse']:.4f}"
@@ -753,7 +748,6 @@ class TrainerSingleFrame:
                 if metrics_training:
                     final_metrics.update({
                         'final_avg_train_loss': np.mean([m['train_loss'] for m in metrics_training]),
-                        'final_avg_val_loss': np.mean([m['val_loss'] for m in metrics_training]),
                         'final_avg_val_f1': np.mean([m['val_f1'] for m in metrics_training]),
                         'final_best_val_f1': max([m['val_f1'] for m in metrics_training]),
                         'final_total_training_time': sum([m['train_time'] for m in metrics_training])
