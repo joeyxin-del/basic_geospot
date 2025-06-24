@@ -33,12 +33,12 @@ model:
     
     # 损失函数配置
     loss:
-      cls_weight: 1.0              # 分类损失权重
+      cls_weight: 5.0              # 分类损失权重
       reg_weight: 1.0              # 回归损失权重
       cls_config:                  # 分类损失配置
         loss_type: "focal"         # 损失类型：focal 或 binary
-        alpha: 0.25                # Focal Loss 的 alpha 参数（平衡正负样本）
-        gamma: 2.0                 # Focal Loss 的 gamma 参数（聚焦参数）
+        alpha: 0.75                # Focal Loss 的 alpha 参数（平衡正负样本）
+        gamma: 1.5                 # Focal Loss 的 gamma 参数（聚焦参数）
         reduction: "none"          # 损失归约方式
         pos_weight: 20.0            # 正样本权重
       reg_config:                  # 回归损失配置
@@ -56,10 +56,12 @@ training:
   
   # 优化器和调度器
   optimizer: "adam"                # 优化器类型 (adam/sgd)
-  scheduler: "step"                # 学习率调度器 (step/cosine/none)
+  scheduler: "cosine"                # 学习率调度器 (step/cosine/none)
   scheduler_config:                # 学习率调度器配置
-    step_size: 50                  # 每隔多少个epoch降低学习率
-    gamma: 0.5                     # 学习率衰减因子 
+      T_max: 100
+      eta_min: 0.00001
+  #  step_size: 50                  # 每隔多少个epoch降低学习率
+  #  gamma: 0.5                     # 学习率衰减因子 
  
   # 训练控制
   checkpoint_interval: 10          # 检查点保存间隔（epoch）

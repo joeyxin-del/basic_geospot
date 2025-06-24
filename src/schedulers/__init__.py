@@ -107,7 +107,7 @@ class SchedulerFactory:
             },
             'cosine': {
                 'T_max': 100,
-                'eta_min': 0
+                'eta_min': 0.00001
             },
             'cosine_warm_restarts': {
                 'T_0': 10,
