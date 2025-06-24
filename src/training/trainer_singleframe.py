@@ -293,7 +293,6 @@ class TrainerSingleFrame:
         for batch_idx, batch in train_pbar:
             # 准备数据 - 单帧格式
             images = batch['image']  # torch.Tensor (已通过collate_fn转换)
-            # print(images.shape)
             labels = batch['label']  # List[Dict]
             
             # 确保images是tensor格式并移动到正确设备
@@ -308,11 +307,24 @@ class TrainerSingleFrame:
             outputs = self.model(images)
 
             # 获取模型输出的空间分辨率
-            cls_pred = outputs['predictions']['cls']
-            out_h, out_w = cls_pred.shape[-2:]
+            if 'multi_scale' in outputs['predictions']:
+                # 收集所有尺度的输出尺寸
+                image_sizes = []
+                for scale_pred in outputs['predictions']['multi_scale']:
+                    cls_pred = scale_pred['cls']
+                    image_sizes.append(cls_pred.shape[-2:])
+            else:
+                cls_pred = outputs['predictions']['cls']
+                image_sizes = cls_pred.shape[-2:]
 
-            targets = self._create_target_tensors(labels, (out_h, out_w))
-            targets = {k: v.to(self.device) for k, v in targets.items()}
+            # 创建目标张量
+            targets = self._create_target_tensors(labels, image_sizes)
+            targets = {k: v.to(self.device) if isinstance(v, torch.Tensor) else 
+                      [{**scale_dict, 'cls': scale_dict['cls'].to(self.device),
+                        'reg': scale_dict['reg'].to(self.device),
+                        'mask': scale_dict['mask'].to(self.device)} 
+                       for scale_dict in v] if k == 'multi_scale' else v
+                      for k, v in targets.items()}
 
             loss_dict = self.model.compute_loss(outputs, targets)
             loss = loss_dict['total_loss']
@@ -344,6 +356,11 @@ class TrainerSingleFrame:
                 for loss_name, loss_value in loss_dict.items():
                     if isinstance(loss_value, torch.Tensor):
                         batch_metrics[f'batch_{loss_name}'] = loss_value.item()
+                    elif isinstance(loss_value, dict) and loss_name == 'scale_losses':
+                        # 记录每个尺度的损失
+                        for scale, scale_loss in loss_value.items():
+                            for k, v in scale_loss.items():
+                                batch_metrics[f'batch_{scale}_{k}'] = v
                 
                 # 添加梯度信息
                 if grad_norm is not None:
@@ -378,57 +395,109 @@ class TrainerSingleFrame:
         }
         
     def _create_target_tensors(self, labels: List[Dict[str, Any]], 
-                             image_size: Tuple[int, int]) -> Dict[str, torch.Tensor]:
+                             image_sizes: Union[Tuple[int, int], List[Tuple[int, int]]] = None) -> Dict[str, Any]:
         """
-        创建目标张量。
+        创建目标张量，支持单尺度和多尺度。
         
         Args:
             labels: 标注列表，每个元素包含frame、num_objects和object_coords
-            image_size: 热图大小 (height, width)
-            
+            image_sizes: 热图大小。可以是：
+                - 单尺度模式：(height, width)
+                - 多尺度模式：[(h1, w1), (h2, w2), (h3, w3)]
+                
         Returns:
-            包含分类和回归目标的字典
+            单尺度模式：包含cls和reg的字典
+            多尺度模式：包含multi_scale列表的字典，每个元素包含scale、cls和reg
         """
-        batch_size = len(labels)
-        
-        # 创建分类和回归目标张量
-        cls_target = torch.zeros((batch_size, 1, image_size[0], image_size[1]))
-        reg_target = torch.zeros((batch_size, 2, image_size[0], image_size[1]))
-        
         # 原图尺寸（假设为640x480）
         orig_h, orig_w = 480, 640
-        # 热图尺寸
-        heat_h, heat_w = image_size
         
-        # 计算缩放比例
-        scale_x = heat_w / orig_w
-        scale_y = heat_h / orig_h
-        
-        # 填充目标张量
-        for i, label in enumerate(labels):
-            coords = label['object_coords']
-            for x, y in coords:
-                # 将原图坐标映射到热图坐标
-                x_heat = x * scale_x
-                y_heat = y * scale_y
+        if isinstance(image_sizes[0], tuple):  # 多尺度模式
+            targets = {'multi_scale': []}
+            for scale_idx, (heat_h, heat_w) in enumerate(image_sizes):
+                # 计算缩放比例
+                scale_x = heat_w / orig_w
+                scale_y = heat_h / orig_h
                 
-                # 获取网格索引
-                x_idx = int(x_heat)
-                y_idx = int(y_heat)
+                # 创建当前尺度的分类和回归目标张量
+                cls_target = torch.zeros((len(labels), 1, heat_h, heat_w))
+                reg_target = torch.zeros((len(labels), 2, heat_h, heat_w))
+                mask_target = torch.zeros((len(labels), 1, heat_h, heat_w))
                 
-                # 确保索引在有效范围内
-                if 0 <= x_idx < heat_w and 0 <= y_idx < heat_h:
-                    # 设置分类目标
-                    cls_target[i, 0, y_idx, x_idx] = 1.0
+                # 填充目标张量
+                for i, label in enumerate(labels):
+                    coords = label['object_coords']
+                    for x, y in coords:
+                        # 将原图坐标映射到热图坐标
+                        x_heat = x * scale_x
+                        y_heat = y * scale_y
+                        
+                        # 获取网格索引
+                        x_idx = int(x_heat)
+                        y_idx = int(y_heat)
+                        
+                        # 确保索引在有效范围内
+                        if 0 <= x_idx < heat_w and 0 <= y_idx < heat_h:
+                            # 设置分类目标
+                            cls_target[i, 0, y_idx, x_idx] = 1.0
+                            
+                            # 设置回归目标（相对于网格中心的偏移）
+                            reg_target[i, 0, y_idx, x_idx] = x_heat - x_idx  # x偏移
+                            reg_target[i, 1, y_idx, x_idx] = y_heat - y_idx  # y偏移
+                            
+                            # 设置掩码
+                            mask_target[i, 0, y_idx, x_idx] = 1.0
+                
+                # 添加到多尺度列表
+                targets['multi_scale'].append({
+                    'scale': f'p{scale_idx + 2}',  # p2, p3, p4
+                    'cls': cls_target,
+                    'reg': reg_target,
+                    'mask': mask_target
+                })
+        else:  # 单尺度模式
+            heat_h, heat_w = image_sizes
+            
+            # 计算缩放比例
+            scale_x = heat_w / orig_w
+            scale_y = heat_h / orig_h
+            
+            # 创建分类和回归目标张量
+            cls_target = torch.zeros((len(labels), 1, heat_h, heat_w))
+            reg_target = torch.zeros((len(labels), 2, heat_h, heat_w))
+            mask_target = torch.zeros((len(labels), 1, heat_h, heat_w))
+            
+            # 填充目标张量
+            for i, label in enumerate(labels):
+                coords = label['object_coords']
+                for x, y in coords:
+                    # 将原图坐标映射到热图坐标
+                    x_heat = x * scale_x
+                    y_heat = y * scale_y
                     
-                    # 设置回归目标（相对于网格中心的偏移）
-                    reg_target[i, 0, y_idx, x_idx] = x_heat - x_idx  # x偏移
-                    reg_target[i, 1, y_idx, x_idx] = y_heat - y_idx  # y偏移
+                    # 获取网格索引
+                    x_idx = int(x_heat)
+                    y_idx = int(y_heat)
                     
-        return {
-            'cls': cls_target,
-            'reg': reg_target
-        }
+                    # 确保索引在有效范围内
+                    if 0 <= x_idx < heat_w and 0 <= y_idx < heat_h:
+                        # 设置分类目标
+                        cls_target[i, 0, y_idx, x_idx] = 1.0
+                        
+                        # 设置回归目标（相对于网格中心的偏移）
+                        reg_target[i, 0, y_idx, x_idx] = x_heat - x_idx  # x偏移
+                        reg_target[i, 1, y_idx, x_idx] = y_heat - y_idx  # y偏移
+                        
+                        # 设置掩码
+                        mask_target[i, 0, y_idx, x_idx] = 1.0
+            
+            targets = {
+                'cls': cls_target,
+                'reg': reg_target,
+                'mask': mask_target
+            }
+            
+        return targets
         
     def _validate_epoch(self) -> Dict[str, float]:
         """
@@ -438,7 +507,6 @@ class TrainerSingleFrame:
             包含验证指标的字典
         """
         self.model.eval()
-        # val_loss = 0  # 移除验证损失计算
         predictions = []
         ground_truth = []
         
@@ -467,26 +535,26 @@ class TrainerSingleFrame:
                 # 前向传播
                 outputs = self.model(images)
                 
-                # 获取模型输出的空间分辨率
-                cls_pred = outputs['predictions']['cls']
+                # 获取模型输出的空间分辨率并进行后处理
+                if 'multi_scale' in outputs['predictions']:
+                    # 使用P2尺度的输出（最高分辨率）进行后处理
+                    p2_pred = outputs['predictions']['multi_scale'][0]  # p2是第一个
+                    cls_pred = p2_pred['cls']
+                    reg_pred = p2_pred['reg']
+                else:
+                    cls_pred = outputs['predictions']['cls']
+                    reg_pred = outputs['predictions']['reg']
+                
                 out_h, out_w = cls_pred.shape[-2:]
                 
-                # 创建目标张量（使用模型输出的分辨率）
-                targets = self._create_target_tensors(labels, (out_h, out_w))
-                targets = {k: v.to(self.device) for k, v in targets.items()}
-                
-                # 计算损失 - 移除验证损失计算
-                # loss_dict = self.model.compute_loss(outputs, targets)
-                # val_loss += loss_dict['total_loss'].item()
-                
                 # 使用后处理将热图转换为坐标列表
-                scale_x = 640 / out_w  # 原图宽度 / 热图宽度
+                scale_x = 640 / out_w
                 scale_y = 480 / out_h  # 原图高度 / 热图高度
                 scale = (scale_x + scale_y) / 2  # 平均缩放因子
                 
                 coords_list = heatmap_to_coords(
-                    cls_pred=outputs['predictions']['cls'].detach().cpu(),
-                    reg_pred=outputs['predictions']['reg'].detach().cpu(),
+                    cls_pred=cls_pred.detach().cpu(),
+                    reg_pred=reg_pred.detach().cpu(),
                     conf_thresh=self.conf_thresh,  # 使用配置的置信度阈值
                     topk=self.topk,                # 使用配置的topk
                     scale=scale
@@ -508,31 +576,7 @@ class TrainerSingleFrame:
                     }
                     predictions.append(pred_dict)
                     ground_truth.append(gt_dict)
-                
-                # 记录验证batch指标到SwanLab - 移除验证损失记录
-                # if self.log_batch_metrics:
-                #     val_batch_metrics = {
-                #         'val_batch_loss': loss_dict['total_loss'].item(),
-                #         'val_epoch': self.current_epoch + 1,
-                #         'val_batch_idx': batch_idx + 1
-                #     }
-                #     
-                #     # 添加详细的损失组件
-                #     for loss_name, loss_value in loss_dict.items():
-                #         if isinstance(loss_value, torch.Tensor):
-                #             val_batch_metrics[f'val_batch_{loss_name}'] = loss_value.item()
-                #     
-                #     # 记录到SwanLab
-                #     self._log_swanlab_metrics(val_batch_metrics, step=self.global_step + batch_idx)
-                
-                # 更新验证进度条 - 移除损失显示
-                # val_pbar.set_postfix({
-                #     'Loss': f"{loss_dict['total_loss'].item():.4f}"
-                # })
                     
-        # 计算平均损失 - 移除验证损失计算
-        # avg_loss = val_loss / len(self.val_loader)
-        
         # 评估预测结果
         eval_results = self.evaluator.evaluate(
             predictions=predictions,
@@ -541,10 +585,7 @@ class TrainerSingleFrame:
             plot=False
         )
         
-        return {
-            # 'loss': avg_loss,  # 移除验证损失
-            **eval_results
-        }
+        return eval_results
         
     def _log_swanlab_metrics(self, metrics: Dict[str, Any], step: Optional[int] = None):
         """

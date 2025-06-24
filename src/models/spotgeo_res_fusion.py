@@ -6,7 +6,7 @@ import torch.nn.functional as F
 import numpy as np
 from PIL import Image
 from ..utils import get_logger
-from ..losses.spotgeo import SpotGEOLoss
+from ..losses.spotgeo import SpotGEOLoss, MultiScaleSpotGEOLoss
 
 from .base import BaseModel
 
@@ -15,19 +15,31 @@ logger = get_logger('spotgeo_model')
 
 class ConvBlock(nn.Module):
     """
-    卷积块，包含卷积、批归一化和激活函数。
+    深度可分离卷积块，包含：
+    1. 深度卷积（Depthwise Convolution）
+    2. 逐点卷积（Pointwise Convolution）
+    3. 批归一化和激活函数
     """
     def __init__(self, in_channels: int, out_channels: int, 
                  kernel_size: int = 3, stride: int = 1, 
                  padding: int = 1, use_bn: bool = True):
         super().__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size, 
-                             stride, padding, bias=not use_bn)
+        # 深度卷积
+        self.depthwise = nn.Conv2d(in_channels, in_channels, kernel_size,
+                                  stride=stride, padding=padding, groups=in_channels,
+                                  bias=False)
+        # 逐点卷积
+        self.pointwise = nn.Conv2d(in_channels, out_channels, 1,
+                                  stride=1, padding=0, bias=not use_bn)
+        # 批归一化和激活函数
         self.bn = nn.BatchNorm2d(out_channels) if use_bn else nn.Identity()
         self.act = nn.ReLU(inplace=True)
         
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.act(self.bn(self.conv(x)))
+        x = self.depthwise(x)
+        x = self.pointwise(x)
+        x = self.bn(x)
+        return self.act(x)
 
 class ResBlock(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, 
@@ -76,7 +88,6 @@ class SpotGEOModelResFusion(BaseModel):
         base_backbone_channels = self.config.get('backbone_channels', [64, 128, 256, 512])
         base_detection_channels = self.config.get('detection_channels', [256, 128, 64])
         scale_factor = self.config.get('scale_factor', 0.25)
-        
         # 应用缩放因子
         backbone_channels = [int(ch * scale_factor) for ch in base_backbone_channels]
         detection_channels = [int(ch * scale_factor) for ch in base_detection_channels]
@@ -84,47 +95,72 @@ class SpotGEOModelResFusion(BaseModel):
         use_bn = self.config.get('use_bn', True)
         self.dropout = self.config.get('dropout', 0.1)
         
+        # 保存缩放后的通道数作为类属性
+        self.scaled_channels = backbone_channels
+
+        
+        # 多尺度检测配置
+        multi_scale_config = self.config.get('multi_scale_detection', {})
+        self.use_multi_scale = multi_scale_config.get('enabled', False)
+        self.fpn_channels = multi_scale_config.get('fpn_channels', 256)
+        self.scale_weights = multi_scale_config.get('scale_weights', [1.0, 1.0, 1.0])
+        
         # 骨干网络
         self.backbone = nn.ModuleList()
-        in_channels = 3  # RGB输入
+        self.backbone_features = {}  # 存储不同层级的特征
+        in_channels = 3
         
         if self.config.get('backbone_type') == 'resnet':
             # 残差网络backbone
             res_blocks_per_layer = self.config.get('res_blocks_per_layer', [2, 2, 2, 2])
-            assert len(backbone_channels) == len(res_blocks_per_layer), "backbone_channels和res_blocks_per_layer的长度不一致"
+            assert len(backbone_channels) == len(res_blocks_per_layer)
             
             for i, (out_channels, num_blocks) in enumerate(zip(backbone_channels, res_blocks_per_layer)):
-                # 每个layer包含多个残差块
+                layer_blocks = []
                 for block_idx in range(num_blocks):
-                    # 第一个块可能需要改变通道数和步长
-                    if block_idx == 0 :
-                        stride = 2  # 每层第一个块使用stride=2进行下采样
-                    else:
-                        stride = 1
-                    
-                    self.backbone.append(ResBlock(in_channels, out_channels, 
-                                                stride=stride, use_bn=use_bn))
+                    stride = 2 if block_idx == 0 else 1
+                    layer_blocks.append(ResBlock(in_channels, out_channels, 
+                                              stride=stride, use_bn=use_bn))
                     in_channels = out_channels
+                self.backbone.append(nn.Sequential(*layer_blocks))
+        
+        # FPN层
+        if self.use_multi_scale:
+            # 获取实际的backbone通道数（考虑scale_factor的影响）
+            scaled_channels = [int(ch) for ch in backbone_channels]
+            
+            # 计算每个层级的实际通道数
+            p2_in_channels = scaled_channels[-3]  # 64
+            p3_in_channels = scaled_channels[-2]  # 128
+            p4_in_channels = scaled_channels[-1]  # 256
+            
+            self.fpn = nn.ModuleDict({
+                # 横向连接，将backbone特征转换为相同的通道数
+                'lateral_p4': nn.Conv2d(p4_in_channels, self.fpn_channels, 1),  # 256->128
+                'lateral_p3': nn.Conv2d(p3_in_channels, self.fpn_channels, 1),  # 128->128
+                'lateral_p2': nn.Conv2d(p2_in_channels, self.fpn_channels, 1),  # 64->128
+                
+                # 3x3卷积融合特征
+                'smooth_p4': ConvBlock(self.fpn_channels, self.fpn_channels),
+                'smooth_p3': ConvBlock(self.fpn_channels, self.fpn_channels),
+                'smooth_p2': ConvBlock(self.fpn_channels, self.fpn_channels),
+            })
+            
+            # 多尺度检测头
+            self.multi_scale_heads = nn.ModuleDict()
+            for scale in ['p2', 'p3', 'p4']:
+                self.multi_scale_heads[f'{scale}_cls'] = nn.Conv2d(self.fpn_channels, self.num_classes, 1)
+                self.multi_scale_heads[f'{scale}_reg'] = nn.Conv2d(self.fpn_channels, 2, 1)
         else:
-            # 普通卷积网络backbone
-            for i, out_channels in enumerate(backbone_channels):
-                # 除第一层外，使用stride=2进行下采样
-                stride = 2 if i > 0 else 1
-                self.backbone.append(ConvBlock(in_channels, out_channels, 
-                                             stride=stride, use_bn=use_bn))
+            # 单尺度检测头
+            self.detection_head = nn.ModuleList()
+            in_channels = backbone_channels[-1]
+            for out_channels in detection_channels:
+                self.detection_head.append(ConvBlock(in_channels, out_channels, use_bn=use_bn))
                 in_channels = out_channels
             
-        # 检测头
-        self.detection_head = nn.ModuleList()
-        in_channels = backbone_channels[-1]
-        for out_channels in detection_channels:
-            self.detection_head.append(ConvBlock(in_channels, out_channels, 
-                                               use_bn=use_bn))
-            in_channels = out_channels
-            
-        # 输出层
-        self.cls_head = nn.Conv2d(detection_channels[-1], self.num_classes, 1)
-        self.reg_head = nn.Conv2d(detection_channels[-1], 2, 1)  # x, y坐标
+            self.cls_head = nn.Conv2d(detection_channels[-1], self.num_classes, 1)
+            self.reg_head = nn.Conv2d(detection_channels[-1], 2, 1)
         
         # 打印模型结构信息
         logger.info(f"Backbone type: {self.config.get('backbone_type', 'conv')}")
@@ -147,7 +183,11 @@ class SpotGEOModelResFusion(BaseModel):
         
         # 初始化损失函数
         loss_config = self.config.get('loss', {})
-        self.loss_fn = SpotGEOLoss(loss_config)
+        if self.use_multi_scale:
+            loss_config['scale_weights'] = self.scale_weights
+            self.loss_fn = MultiScaleSpotGEOLoss(loss_config)
+        else:
+            self.loss_fn = SpotGEOLoss(loss_config)
         
     def _initialize_weights(self):
         """初始化模型权重"""
@@ -232,48 +272,77 @@ class SpotGEOModelResFusion(BaseModel):
         Raises:
             ValueError: 当输入数据无效时
         """
-        # 处理输入
         if isinstance(x, dict):
-            if 'images' not in x:
-                raise ValueError("输入字典必须包含'images'键")
-            if not x['images']:  # 检查空列表
-                raise ValueError("输入图像列表不能为空")
-            if 'labels' in x and not isinstance(x['labels'], torch.Tensor):
-                raise ValueError("标签必须是torch.Tensor类型")
-            if 'labels' in x and torch.any(x['labels'] < 0):
-                raise ValueError("标签值不能为负数")
             x = self._preprocess_images(x['images'])
-        else:
+        elif isinstance(x, list):
             x = self._preprocess_images(x)
             
         features = []
+        multi_scale_features = {}
         
-        # 骨干网络
-        for layer in self.backbone:
+        # 骨干网络前向传播
+        for i, layer in enumerate(self.backbone):
             x = layer(x)
             features.append(x)
-
-        # 检测头
-        for layer in self.detection_head:
-            x = layer(x)
-            features.append(x)
-
-        # 输出预测
-        cls_pred = self.cls_head(x)
-        reg_pred = self.reg_head(x)
-
+            if self.use_multi_scale:
+                # 存储P2, P3, P4的特征
+                if i >= len(self.backbone) - 3:
+                    # 从backbone的倒数第三层开始，依次对应P2, P3, P4
+                    scale_idx = i - (len(self.backbone) - 3)  # 0, 1, 2 -> p2, p3, p4
+                    scale_name = f'p{scale_idx + 2}'
+                    multi_scale_features[scale_name] = x
         
-        # # 分类预测（用于测试）
-        # cls_logits = self.classifier(x)
-        # cls_probs = F.softmax(cls_logits, dim=1)
+        if self.use_multi_scale:
+            # 从最深层开始处理
+            # 首先处理P4
+            p4 = self.fpn['lateral_p4'](multi_scale_features['p4'])
+            
+            # 然后处理P3，加上上采样的P4
+            p3 = self.fpn['lateral_p3'](multi_scale_features['p3'])
+            p3 = p3 + F.interpolate(p4, size=p3.shape[-2:], mode='nearest')
+            
+            # 最后处理P2，加上上采样的P3
+            p2 = self.fpn['lateral_p2'](multi_scale_features['p2'])
+            p2 = p2 + F.interpolate(p3, size=p2.shape[-2:], mode='nearest')
+            
+            # 特征平滑
+            p4 = self.fpn['smooth_p4'](p4)
+            p3 = self.fpn['smooth_p3'](p3)
+            p2 = self.fpn['smooth_p2'](p2)
+            
+            # 多尺度预测
+            predictions = {
+                'multi_scale': [
+                    {
+                        'scale': 'p2',
+                        'cls': self.multi_scale_heads['p2_cls'](p2),
+                        'reg': self.multi_scale_heads['p2_reg'](p2)
+                    },
+                    {
+                        'scale': 'p3',
+                        'cls': self.multi_scale_heads['p3_cls'](p3),
+                        'reg': self.multi_scale_heads['p3_reg'](p3)
+                    },
+                    {
+                        'scale': 'p4',
+                        'cls': self.multi_scale_heads['p4_cls'](p4),
+                        'reg': self.multi_scale_heads['p4_reg'](p4)
+                    }
+                ]
+            }
+        else:
+            # 单尺度检测头
+            for layer in self.detection_head:
+                x = layer(x)
+                features.append(x)
+            
+            predictions = {
+                'cls': self.cls_head(x),
+                'reg': self.reg_head(x)
+            }
         
         return {
-            'predictions': {
-                'cls': cls_pred,  # [B, num_classes, H, W]
-                'reg': reg_pred,  # [B, 2, H, W]
-                # 'logits': cls_logits,  # [B, num_classes]
-                # 'probs': cls_probs,  # [B, num_classes]
-            },
+            'predictions': predictions,
             'features': features
         }
         
@@ -283,48 +352,97 @@ class SpotGEOModelResFusion(BaseModel):
         计算模型损失。
         
         Args:
-            predictions: 模型预测结果字典，包含：
-                - predictions.cls: 分类预测 [B, num_classes, H, W]
-                - predictions.reg: 回归预测 [B, 2, H, W]
-                - predictions.logits: 分类logits [B, num_classes]
-            targets: 目标值字典，包含：
-                - cls: 分类标签 [B, num_classes, H, W] 或 [B, num_classes]
-                - reg: 回归标签 [B, 2, H, W]
-                - mask: 有效区域掩码 [B, 1, H, W]（可选）
+            predictions: 模型预测结果字典
+                单尺度模式:
+                    - predictions.cls: 分类预测 [B, num_classes, H, W]
+                    - predictions.reg: 回归预测 [B, 2, H, W]
+                多尺度模式:
+                    - predictions.multi_scale: 包含多个尺度预测的列表，每个元素包含：
+                        - scale: 尺度名称
+                        - cls: 分类预测
+                        - reg: 回归预测
+            targets: 目标值字典
+                单尺度模式:
+                    - cls: 分类标签 [B, num_classes, H, W]
+                    - reg: 回归标签 [B, 2, H, W]
+                    - mask: 有效区域掩码 [B, 1, H, W]
+                多尺度模式:
+                    - multi_scale: 包含多个尺度目标的列表，每个元素包含：
+                        - scale: 尺度名称
+                        - cls: 分类标签
+                        - reg: 回归标签
+                        - mask: 有效区域掩码
                 
         Returns:
             包含以下键的损失字典：
             - cls_loss: 分类损失
             - reg_loss: 回归损失
             - total_loss: 总损失
+            多尺度模式额外包含：
+            - scale_losses: 各尺度的损失和权重信息
         """
         pred_dict = predictions['predictions']
-        cls_pred = pred_dict['cls']  # [B, num_classes, H, W]
-        reg_pred = pred_dict['reg']  # [B, 2, H, W]
         
-        # 准备损失函数需要的输入格式
-        loss_predictions = {
-            'cls': cls_pred,
-            'reg': reg_pred
-        }
-        
-        # 准备目标格式，确保包含mask
-        loss_targets = {}
-        if 'cls' in targets:
-            loss_targets['cls'] = targets['cls']
-        if 'reg' in targets:
-            loss_targets['reg'] = targets['reg']
-        
-        # 如果没有提供mask，创建一个全1的掩码
-        if 'mask' not in loss_targets:
-            # 使用分类预测的形状创建掩码
-            mask = torch.ones_like(cls_pred[:, 0:1])  # [B, 1, H, W]
-            loss_targets['mask'] = mask
-        
-        # 使用SpotGEOLoss计算损失
-        loss_dict = self.loss_fn(loss_predictions, loss_targets)
-        
-        return loss_dict
+        if 'multi_scale' in pred_dict:
+            # 多尺度损失计算
+            total_cls_loss = 0.0
+            total_reg_loss = 0.0
+            scale_losses = {}
+            
+            # 获取每个尺度的权重
+            scale_weights = self.config.get('multi_scale_detection', {}).get('scale_weights', [1.0, 1.0, 1.0])
+            
+            for idx, (scale_pred, scale_target) in enumerate(zip(pred_dict['multi_scale'], targets['multi_scale'])):
+                scale = scale_pred['scale']
+                scale_weight = scale_weights[idx]
+                
+                # 准备当前尺度的预测和目标
+                scale_predictions = {
+                    'cls': scale_pred['cls'],
+                    'reg': scale_pred['reg']
+                }
+                
+                scale_targets = {
+                    'cls': scale_target['cls'],
+                    'reg': scale_target['reg'],
+                    'mask': scale_target['mask']
+                }
+                
+                # 使用损失函数计算当前尺度的损失
+                scale_loss_dict = self.loss_fn(scale_predictions, scale_targets)
+                
+                # 应用尺度权重
+                weighted_cls_loss = scale_loss_dict['cls_loss'] * scale_weight
+                weighted_reg_loss = scale_loss_dict['reg_loss'] * scale_weight
+                weighted_total_loss = scale_loss_dict['total_loss'] * scale_weight
+                
+                # 累加损失
+                total_cls_loss += weighted_cls_loss
+                total_reg_loss += weighted_reg_loss
+                
+                # 记录每个尺度的损失和权重信息
+                scale_losses[scale] = {
+                    'cls_loss': scale_loss_dict['cls_loss'].item(),
+                    'reg_loss': scale_loss_dict['reg_loss'].item(),
+                    'total_loss': scale_loss_dict['total_loss'].item(),
+                    'weighted_cls_loss': weighted_cls_loss.item(),
+                    'weighted_reg_loss': weighted_reg_loss.item(),
+                    'weighted_total_loss': weighted_total_loss.item(),
+                    'scale_weight': scale_weight
+                }
+            
+            # 计算总损失
+            total_loss = total_cls_loss + total_reg_loss
+            
+            return {
+                'cls_loss': total_cls_loss,
+                'reg_loss': total_reg_loss,
+                'total_loss': total_loss,
+                'scale_losses': scale_losses
+            }
+        else:
+            # 单尺度损失计算
+            return self.loss_fn(pred_dict, targets)
 
 # 在文件末尾注册模型
 from src.models.registry import model_registry

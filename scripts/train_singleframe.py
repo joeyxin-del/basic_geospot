@@ -16,7 +16,6 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.optim import Adam, SGD
-from torch.optim.lr_scheduler import StepLR, CosineAnnealingLR
 import torchvision.transforms as transforms
 from PIL import Image
 
@@ -27,6 +26,8 @@ from src.datasets.spotgeov2_singleframe import SpotGEOv2_SingleFrame
 from src.training.trainer_singleframe import TrainerSingleFrame
 from src.models import get_model
 from src.utils import get_logger
+from src.transforms.factory import TransformFactory
+from src.transforms.image import AdvancedAugmentation
 
 logger = get_logger('train_singleframe')
 
@@ -380,6 +381,56 @@ def custom_collate_fn(batch):
         'frame_idx': frame_indices
     }
 
+def create_transforms(config: Dict[str, Any]):
+    """创建数据增强转换"""
+    aug_config = config.get('augmentation', {})
+    
+    # 如果使用高级数据增强
+    if aug_config.get('use_advanced', True):
+        logger.info("使用高级数据增强...")
+        return [AdvancedAugmentation(config=aug_config.get('advanced', {}))]
+    
+    # 如果使用组合流水线
+    if aug_config.get('use_pipeline', False):
+        logger.info("使用数据增强流水线...")
+        return [AugmentationPipeline(config=aug_config.get('pipeline', {}))]
+    
+    # 否则使用单独的数据增强
+    logger.info("使用单独的数据增强...")
+    train_transforms = []
+
+    # 随机翻转
+    flip_config = aug_config.get('random_flip', {})
+    if flip_config.get('enabled', False):
+        train_transforms.append(
+            RandomFlip(config=flip_config)
+        )
+
+    # 随机旋转
+    rotation_config = aug_config.get('random_rotation', {})
+    if rotation_config.get('enabled', False):
+        train_transforms.append(
+            RandomRotation(
+                degrees=rotation_config.get('degrees', 10),
+                p=rotation_config.get('p', 0.5),
+                config=rotation_config
+            )
+        )
+
+    # 颜色增强
+    color_config = aug_config.get('color_augmentation', {})
+    if color_config.get('enabled', False):
+        train_transforms.append(
+            ColorAugmentation(config=color_config)
+        )
+
+    if not train_transforms:
+        logger.warning("没有启用任何数据增强转换！")
+    else:
+        logger.info(f"已启用的数据增强: {[type(t).__name__ for t in train_transforms]}")
+
+    return train_transforms
+
 def main():
     """主函数"""
     args = parse_args()
@@ -417,9 +468,10 @@ def main():
     logger.info(f"最终配置:")
     logger.info(yaml.dump(config, default_flow_style=False, allow_unicode=True))
     
-    # 加载模型配置
-    model_config_path = config.get('model_config_path')
-    model_config = load_model_config(model_config_path) if model_config_path else config['model'].get('config', {})
+    # 创建数据增强
+    train_transforms = create_transforms(config)
+    logger.info("创建数据增强...")
+    logger.info(f"使用的数据增强: {[type(t).__name__ for t in train_transforms]}")
     
     # 创建数据集
     logger.info("创建数据集...")
@@ -427,14 +479,14 @@ def main():
     train_dataset = SpotGEOv2_SingleFrame(
         root_dir=data_config['train_dir'],
         annotation_path=data_config['train_anno'],
-        transform=None,  # 可以在这里添加数据增强
+        transform=train_transforms,  # 应用数据增强到训练集
         config={}
     )
     
     val_dataset = SpotGEOv2_SingleFrame(
         root_dir=data_config['val_dir'],
         annotation_path=data_config['val_anno'],
-        transform=None,
+        transform=None,  # 验证集不使用数据增强
         config={}
     )
     
@@ -467,7 +519,7 @@ def main():
     
     # 创建模型
     logger.info("创建模型...")
-    model = get_model(config['model']['name'], config=model_config)
+    model = get_model(config['model']['name'], config=config['model'].get('config', {}))
     # 使用torchinfo打印模型信息
     from torchinfo import summary
     

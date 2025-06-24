@@ -219,7 +219,7 @@ class RegressionLoss(BaseLoss):
 class SpotGEOLoss(BaseLoss):
     """
     SpotGEO检测模型的组合损失函数。
-    结合分类损失和回归损失。
+    支持单尺度检测头的损失计算。
     """
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
@@ -243,7 +243,7 @@ class SpotGEOLoss(BaseLoss):
     def forward(self, predictions: Dict[str, torch.Tensor], 
                 targets: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         """
-        计算组合损失。
+        计算组合损失。仅支持单尺度预测。
         
         Args:
             predictions: 模型预测结果字典，包含：
@@ -278,7 +278,76 @@ class SpotGEOLoss(BaseLoss):
         }
 
 
+class MultiScaleSpotGEOLoss(BaseLoss):
+    """
+    多尺度SpotGEO检测模型的损失函数。
+    为不同尺度的预测分别计算损失并加权。
+    """
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        """
+        初始化多尺度损失函数。
+        
+        Args:
+            config: 损失函数配置字典，包含以下键：
+                - cls_weight: 分类损失权重（可选，默认为1.0）
+                - reg_weight: 回归损失权重（可选，默认为1.0）
+                - scale_weights: 不同尺度的权重列表（可选，默认为[1.0, 1.0, 1.0]）
+                - cls_config: 分类损失配置（可选）
+                - reg_config: 回归损失配置（可选）
+        """
+        super().__init__(config)
+        self.cls_weight = self.config.get('cls_weight', 1.0)
+        self.reg_weight = self.config.get('reg_weight', 1.0)
+        self.scale_weights = self.config.get('scale_weights', [1.0, 1.0, 1.0])
+        
+        # 创建分类和回归损失函数
+        self.cls_loss = ClassificationLoss(self.config.get('cls_config'))
+        self.reg_loss = RegressionLoss(self.config.get('reg_config'))
+        
+    def forward(self, predictions: Dict[str, Any], targets: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        计算多尺度损失。
+        
+        Args:
+            predictions: 模型预测结果字典，包含：
+                - cls: 分类预测 [B, num_classes, H, W]
+                - reg: 回归预测 [B, 2, H, W]
+            targets: 目标值字典，包含：
+                - cls: 分类标签 [B, num_classes, H, W]
+                - reg: 回归标签 [B, 2, H, W]
+                - mask: 有效区域掩码 [B, 1, H, W]
+                
+        Returns:
+            包含以下键的损失字典：
+            - cls_loss: 总分类损失
+            - reg_loss: 总回归损失
+            - total_loss: 总损失
+            - scale_losses: 各尺度的损失信息字典
+        """
+        # 计算分类损失
+        cls_loss_dict = self.cls_loss(predictions, targets)
+        cls_loss = cls_loss_dict['loss']
+        
+        # 计算回归损失
+        reg_loss_dict = self.reg_loss(predictions, targets)
+        reg_loss = reg_loss_dict['loss']
+        
+        # 应用损失权重
+        weighted_cls_loss = self.cls_weight * cls_loss
+        weighted_reg_loss = self.reg_weight * reg_loss
+        
+        # 计算总损失
+        total_loss = weighted_cls_loss + weighted_reg_loss
+        
+        return {
+            'cls_loss': weighted_cls_loss,
+            'reg_loss': weighted_reg_loss,
+            'total_loss': total_loss
+        }
+
+
 # 注册损失函数
 LossFactory.register('classification')(ClassificationLoss)
 LossFactory.register('regression')(RegressionLoss)
-LossFactory.register('spotgeo')(SpotGEOLoss) 
+LossFactory.register('spotgeo')(SpotGEOLoss)
+LossFactory.register('multi_scale_spotgeo')(MultiScaleSpotGEOLoss) 

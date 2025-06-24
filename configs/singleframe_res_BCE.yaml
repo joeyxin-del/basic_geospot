@@ -52,19 +52,19 @@ training:
   batch_size: 64                 # 批次大小（可根据GPU内存调整）
   num_workers: 4                   # 数据加载器工作进程数
   epochs: 800                     # 训练轮数
-  lr: 0.0005                       # 学习率
+  lr: 0.00005                       # 学习率
   
   # 优化器和调度器
   optimizer: "adam"                # 优化器类型 (adam/sgd)
   scheduler: "step"                # 学习率调度器 (step/cosine/none)
   scheduler_config:                # 学习率调度器配置
-    step_size: 50                  # 每隔多少个epoch降低学习率
-    gamma: 0.5                     # 学习率衰减因子 
- 
+    step_size: 30                  # 每隔多少个epoch降低学习率
+    gamma: 0.1                     # 学习率衰减因子
+  
   # 训练控制
   checkpoint_interval: 10          # 检查点保存间隔（epoch）
   eval_interval: 5                 # 验证间隔（epoch）
-  early_stopping_patience: 100     # 早停耐心值（残差网络可能需要更多时间收敛）
+  early_stopping_patience: 20     # 早停耐心值（残差网络可能需要更多时间收敛）
 
 # ================================
 # 输出配置
@@ -92,7 +92,7 @@ logging:
 # 后处理配置
 # ================================
 postprocessing:
-  conf_thresh: 0.3                 # 置信度阈值
+  conf_thresh: 0.1                 # 置信度阈值
   topk: 100                       # 保留的top-k预测
 
 # ================================

@@ -3,6 +3,7 @@ import json
 from typing import Any, Dict, List, Optional, Tuple
 from PIL import Image
 from .base import DatasetBase
+from ..transforms.base import Compose
 
 class SpotGEOv2_SingleFrame(DatasetBase):
     """
@@ -19,13 +20,18 @@ class SpotGEOv2_SingleFrame(DatasetBase):
         """
         :param root_dir: 数据集根目录（train或test文件夹）
         :param annotation_path: 标注文件路径（train_anno.json或test_anno.json）
-        :param transform: 数据增强方法
+        :param transform: 数据增强方法或数据增强方法列表
         :param config: 其他配置参数
         """
         super().__init__(config or {})
         self.root_dir = root_dir
         self.annotation_path = annotation_path
-        self.transform = transform
+        
+        # 处理transform参数
+        if isinstance(transform, list):
+            self.transform = Compose(transform)
+        else:
+            self.transform = transform
         
         # 加载序列和标注
         self.sequences = self._load_sequences()
@@ -154,7 +160,13 @@ class SpotGEOv2_SingleFrame(DatasetBase):
         }
         
         if self.transform:
-            sample = self.transform(sample)
+            if isinstance(self.transform, list):
+                # 如果transform是列表，依次应用每个转换
+                for t in self.transform:
+                    sample = t(sample)
+            else:
+                # 如果transform是单个转换，直接应用
+                sample = self.transform(sample)
             
         return sample
 
