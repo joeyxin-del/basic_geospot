@@ -4,6 +4,8 @@ from typing import Any, Dict, List, Optional, Tuple
 from PIL import Image
 from .base import DatasetBase
 from ..transforms.base import Compose
+import torch
+import numpy as np
 
 class SpotGEOv2_SingleFrame(DatasetBase):
     """
@@ -150,7 +152,13 @@ class SpotGEOv2_SingleFrame(DatasetBase):
         
         # 加载图像
         image_path = os.path.join(sequence_dir, image_files[frame_idx])
-        image = Image.open(image_path).convert('RGB')
+        image = Image.open(image_path).convert('L')
+        
+        # 转换为tensor并归一化
+        image = torch.from_numpy(np.array(image)).float()
+        if image.dim() == 2:  # 如果是2D张量，添加通道维度
+            image = image.unsqueeze(0)
+        image = image / 255.0  # 归一化到[0,1]
         
         sample = {
             'image': image,
@@ -159,6 +167,7 @@ class SpotGEOv2_SingleFrame(DatasetBase):
             'frame_idx': frame_idx
         }
         
+        # 应用额外的数据增强
         if self.transform:
             if isinstance(self.transform, list):
                 # 如果transform是列表，依次应用每个转换

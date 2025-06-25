@@ -35,12 +35,8 @@ model:
     detection_channels: [256, 128, 64]      # 检测头通道数
     num_classes: 1                  # 类别数量
     
-    # 多尺度检测头配置
-    multi_scale_detection:
-      enabled: true                # 是否启用多尺度检测
-      fpn_channels: 64          # FPN特征通道数（修改为缩放后的通道数）
-      scales: ["p2", "p3", "p4"]  # 使用的特征层级
-      scale_weights: [1.2, 1.0, 0.8]  # 不同尺度的损失权重
+    # FPN配置
+    fpn_channels: 64               # FPN特征通道数（修改为缩放后的通道数）
     
     # 模型优化配置
     use_bn: true                   # 是否使用批归一化
@@ -89,7 +85,7 @@ training:
 # ================================
 output:
   output_dir: "outputs"            # 输出根目录
-  experiment_name: "singleframe_res_fusion_BCE"  # 实验名称
+  experiment_name: "singleframe_res_p2_focal_tn"  # 实验名称
 
 # ================================
 # 设备配置

@@ -71,12 +71,6 @@ class AdvancedAugmentation(AlbumentationsWrap):
                     var_limit=self.config.get('noise_var_limit', (10.0, 50.0)),
                     p=1.0
                 ),
-                A.HueSaturationValue(
-                    hue_shift_limit=0,  # 不调整色调
-                    sat_shift_limit=self.config.get('saturation_limit', (-30, 30)),
-                    val_shift_limit=0,  # 不调整明度
-                    p=1.0
-                ),
             ], p=self.config.get('enhance_prob', 0.3)),  # 图像增强组的整体概率
         ])
         

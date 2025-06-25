@@ -348,11 +348,8 @@ def convert_config_types(config: Dict[str, Any]) -> Dict[str, Any]:
 
 def custom_collate_fn(batch):
     """
-    自定义的批处理函数，处理PIL图像转tensor
+    自定义的批处理函数，处理tensor的堆叠
     """
-    # 准备转换器
-    transform = transforms.ToTensor()
-    
     # 分别处理每个字段
     images = []
     labels = []
@@ -360,11 +357,8 @@ def custom_collate_fn(batch):
     frame_indices = []
     
     for sample in batch:
-        # 处理图像
-        image = sample['image']
-        if isinstance(image, Image.Image):
-            image = transform(image)  # PIL -> tensor
-        images.append(image)
+        # 图像已经是归一化的tensor了
+        images.append(sample['image'])
         
         # 其他字段直接添加
         labels.append(sample['label'])
@@ -389,40 +383,7 @@ def create_transforms(config: Dict[str, Any]):
     if aug_config.get('use_advanced', True):
         logger.info("使用高级数据增强...")
         return [AdvancedAugmentation(config=aug_config.get('advanced', {}))]
-    
-    # 如果使用组合流水线
-    if aug_config.get('use_pipeline', False):
-        logger.info("使用数据增强流水线...")
-        return [AugmentationPipeline(config=aug_config.get('pipeline', {}))]
-    
-    # 否则使用单独的数据增强
-    logger.info("使用单独的数据增强...")
-    train_transforms = []
 
-    # 随机翻转
-    flip_config = aug_config.get('random_flip', {})
-    if flip_config.get('enabled', False):
-        train_transforms.append(
-            RandomFlip(config=flip_config)
-        )
-
-    # 随机旋转
-    rotation_config = aug_config.get('random_rotation', {})
-    if rotation_config.get('enabled', False):
-        train_transforms.append(
-            RandomRotation(
-                degrees=rotation_config.get('degrees', 10),
-                p=rotation_config.get('p', 0.5),
-                config=rotation_config
-            )
-        )
-
-    # 颜色增强
-    color_config = aug_config.get('color_augmentation', {})
-    if color_config.get('enabled', False):
-        train_transforms.append(
-            ColorAugmentation(config=color_config)
-        )
 
     if not train_transforms:
         logger.warning("没有启用任何数据增强转换！")
@@ -525,7 +486,7 @@ def main():
     
     # 获取一个批次的输入尺寸
     batch_size = training_config['batch_size']
-    input_size = (batch_size, 3, 480, 640)  # 假设输入图像尺寸为480x640
+    input_size = (batch_size, 1, 480, 640)  # 假设输入图像尺寸为480x640
     
     # 打印模型结构、参数量和计算量
     model_stats = summary(
@@ -538,7 +499,7 @@ def main():
     logger.info(f"模型参数数量: {sum(p.numel() for p in model.parameters()):,}")
     # 计算模型的计算量(FLOPs)和参数量
     from thop import profile
-    input_tensor = torch.randn(32, 3, 480, 640).to(device)
+    input_tensor = torch.randn(32, 1, 480, 640).to(device)
     flops, params = profile(model, inputs=(input_tensor,))
     
     # 转换为更易读的格式
