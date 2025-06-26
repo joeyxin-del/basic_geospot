@@ -380,17 +380,12 @@ def create_transforms(config: Dict[str, Any]):
     aug_config = config.get('augmentation', {})
     
     # 如果使用高级数据增强
-    if aug_config.get('use_advanced', True):
+    if aug_config.get('use_advanced', False):
         logger.info("使用高级数据增强...")
         return [AdvancedAugmentation(config=aug_config.get('advanced', {}))]
-
-
-    if not train_transforms:
-        logger.warning("没有启用任何数据增强转换！")
     else:
-        logger.info(f"已启用的数据增强: {[type(t).__name__ for t in train_transforms]}")
-
-    return train_transforms
+        logger.info("不使用数据增强！！！")
+        return None
 
 def main():
     """主函数"""
@@ -432,7 +427,7 @@ def main():
     # 创建数据增强
     train_transforms = create_transforms(config)
     logger.info("创建数据增强...")
-    logger.info(f"使用的数据增强: {[type(t).__name__ for t in train_transforms]}")
+    # logger.info(f"使用的数据增强: {[type(t).__name__ for t in train_transforms]}")
     
     # 创建数据集
     logger.info("创建数据集...")
