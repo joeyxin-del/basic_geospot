@@ -55,7 +55,8 @@ class TrainerSingleFrame:
         topk: int = 100,           # 添加topk参数
         log_epoch_metrics: bool = True,  # 是否记录每个epoch的指标  
         log_batch_metrics: bool = True,  # 是否记录每个batch的指标
-        log_gradients: bool = True       # 是否记录梯度信息
+        log_gradients: bool = True,      # 是否记录梯度信息
+        config: Optional[Dict[str, Any]] = None  # 添加配置参数
     ):
         """
         初始化单帧训练器。
@@ -82,6 +83,7 @@ class TrainerSingleFrame:
             topk: topk参数
             log_batch_metrics: 是否记录每个batch的指标
             log_gradients: 是否记录梯度信息
+            config: 配置参数
         """
         self.model = model.to(device)
         self.train_loader = train_loader
@@ -214,7 +216,9 @@ class TrainerSingleFrame:
         # 恢复训练
         if resume:
             self._load_checkpoint(resume)
-            
+        
+        self.config = config or {}
+        
     def _save_checkpoint(self, epoch: int, is_best: bool = False):
         """
         保存检查点。
@@ -270,6 +274,138 @@ class TrainerSingleFrame:
         
         logger.info(f"Resumed from epoch {self.current_epoch}")
         
+    def _generate_gaussian_kernel(self, size: int, sigma: float) -> torch.Tensor:
+        """
+        生成高斯核权重。
+        
+        Args:
+            size: 核大小（奇数）
+            sigma: 高斯分布的标准差
+            
+        Returns:
+            torch.Tensor: 高斯核权重
+        """
+        if size % 2 == 0:
+            raise ValueError("Kernel size must be odd")
+            
+        center = size // 2
+        x = torch.arange(size, dtype=torch.float32) - center
+        y = torch.arange(size, dtype=torch.float32) - center
+        
+        xx, yy = torch.meshgrid(x, y, indexing='ij')
+        kernel = torch.exp(-(xx.pow(2) + yy.pow(2)) / (2 * sigma ** 2))
+        
+        # 归一化使中心点为1
+        kernel = kernel / kernel[center, center]
+        
+        # 获取配置的最小值阈值，默认为0.1
+        min_value = self.config.get('model', {}).get('soft_target', {}).get('min_value', 0.1)
+        kernel[kernel < min_value] = 0
+        
+        return kernel
+        
+    def _create_soft_target_tensors(
+        self, 
+        labels: List[Dict[str, Any]], 
+        image_sizes: Union[Tuple[int, int], List[Tuple[int, int]]] = None
+    ) -> Dict[str, Any]:
+        """
+        创建软标签目标张量，仅支持单尺度模式。
+        
+        Args:
+            labels: 标注列表，每个元素包含frame、num_objects和object_coords
+            image_sizes: 热图大小 (height, width)
+                
+        Returns:
+            包含cls、reg和mask的字典
+        """
+        # 原图尺寸（假设为640x480）
+        orig_h, orig_w = 480, 640
+        
+        # 获取软标签配置
+        soft_target_config = self.config.get('model', {}).get('soft_target', {})
+        enabled = soft_target_config.get('enabled', False)
+        alpha = soft_target_config.get('alpha', 3.0)
+        sigma = soft_target_config.get('sigma', 0.8)
+        
+        # 如果启用了动态sigma
+        if soft_target_config.get('dynamic_sigma', {}).get('enabled', False):
+            progress = self.current_epoch / self.max_epochs
+            init_sigma = soft_target_config['dynamic_sigma']['init_sigma']
+            final_sigma = soft_target_config['dynamic_sigma']['final_sigma']
+            schedule = soft_target_config['dynamic_sigma']['schedule']
+            
+            if schedule == 'linear':
+                sigma = init_sigma + (final_sigma - init_sigma) * progress
+            elif schedule == 'cosine':
+                sigma = final_sigma + (init_sigma - final_sigma) * (1 + np.cos(progress * np.pi)) / 2
+            elif schedule == 'step':
+                sigma = init_sigma if progress < 0.3 else (
+                    (init_sigma + final_sigma) / 2 if progress < 0.7 else final_sigma
+                )
+        
+        # 生成高斯核（如果启用软标签）
+        if enabled:
+            kernel_size = int(alpha * 2 + 1)  # 确保是奇数
+            gaussian_kernel = self._generate_gaussian_kernel(kernel_size, sigma)
+            gaussian_kernel = gaussian_kernel.to(self.device)
+            
+        # 获取特征图尺寸
+        if isinstance(image_sizes, (list, tuple)) and len(image_sizes) == 2:
+            heat_h, heat_w = image_sizes
+        else:
+            raise ValueError("image_sizes should be a tuple of (height, width)")
+            
+        # 计算缩放比例
+        scale_x = heat_w / orig_w
+        scale_y = heat_h / orig_h
+        
+        # 创建目标张量
+        cls_target = torch.zeros((len(labels), 1, heat_h, heat_w), device=self.device)
+        reg_target = torch.zeros((len(labels), 2, heat_h, heat_w), device=self.device)
+        mask_target = torch.zeros((len(labels), 1, heat_h, heat_w), device=self.device)
+        
+        # 填充目标张量
+        for i, label in enumerate(labels):
+            coords = label['object_coords']
+            for x, y in coords:
+                # 将原图坐标映射到热图坐标
+                x_heat = x * scale_x
+                y_heat = y * scale_y
+                
+                # 获取网格索引
+                x_idx = int(x_heat)
+                y_idx = int(y_heat)
+                
+                # 确保索引在有效范围内
+                if 0 <= x_idx < heat_w and 0 <= y_idx < heat_h:
+                    if enabled:
+                        # 计算高斯核的有效范围
+                        k_size = kernel_size // 2
+                        for dy in range(-k_size, k_size + 1):
+                            for dx in range(-k_size, k_size + 1):
+                                new_y = y_idx + dy
+                                new_x = x_idx + dx
+                                if 0 <= new_x < heat_w and 0 <= new_y < heat_h:
+                                    weight = gaussian_kernel[dy + k_size, dx + k_size]
+                                    if weight > 0:  # 只设置大于0的权重
+                                        cls_target[i, 0, new_y, new_x] = weight
+                                        mask_target[i, 0, new_y, new_x] = weight
+                    else:
+                        # 使用硬标签
+                        cls_target[i, 0, y_idx, x_idx] = 1.0
+                        mask_target[i, 0, y_idx, x_idx] = 1.0
+                    
+                    # 回归目标仍然只在中心点设置
+                    reg_target[i, 0, y_idx, x_idx] = x_heat - x_idx  # x偏移
+                    reg_target[i, 1, y_idx, x_idx] = y_heat - y_idx  # y偏移
+        
+        return {
+            'cls': cls_target,
+            'reg': reg_target,
+            'mask': mask_target
+        }
+        
     def _train_epoch(self) -> Dict[str, float]:
         """
         训练一个epoch。
@@ -317,15 +453,9 @@ class TrainerSingleFrame:
                 cls_pred = outputs['predictions']['cls']
                 image_sizes = cls_pred.shape[-2:]
 
-            # 创建目标张量
-            targets = self._create_target_tensors(labels, image_sizes)
-            targets = {k: v.to(self.device) if isinstance(v, torch.Tensor) else 
-                      [{**scale_dict, 'cls': scale_dict['cls'].to(self.device),
-                        'reg': scale_dict['reg'].to(self.device),
-                        'mask': scale_dict['mask'].to(self.device)} 
-                       for scale_dict in v] if k == 'multi_scale' else v
-                      for k, v in targets.items()}
-
+            # 创建目标张量（使用软标签）
+            targets = self._create_soft_target_tensors(labels, image_sizes)
+            
             loss_dict = self.model.compute_loss(outputs, targets)
             loss = loss_dict['total_loss']
 
@@ -394,111 +524,6 @@ class TrainerSingleFrame:
             'lr': self.optimizer.param_groups[0]['lr']
         }
         
-    def _create_target_tensors(self, labels: List[Dict[str, Any]], 
-                             image_sizes: Union[Tuple[int, int], List[Tuple[int, int]]] = None) -> Dict[str, Any]:
-        """
-        创建目标张量，支持单尺度和多尺度。
-        
-        Args:
-            labels: 标注列表，每个元素包含frame、num_objects和object_coords
-            image_sizes: 热图大小。可以是：
-                - 单尺度模式：(height, width)
-                - 多尺度模式：[(h1, w1), (h2, w2), (h3, w3)]
-                
-        Returns:
-            单尺度模式：包含cls和reg的字典
-            多尺度模式：包含multi_scale列表的字典，每个元素包含scale、cls和reg
-        """
-        # 原图尺寸（假设为640x480）
-        orig_h, orig_w = 480, 640
-        
-        if isinstance(image_sizes[0], tuple):  # 多尺度模式
-            targets = {'multi_scale': []}
-            for scale_idx, (heat_h, heat_w) in enumerate(image_sizes):
-                # 计算缩放比例
-                scale_x = heat_w / orig_w
-                scale_y = heat_h / orig_h
-                
-                # 创建当前尺度的分类和回归目标张量
-                cls_target = torch.zeros((len(labels), 1, heat_h, heat_w))
-                reg_target = torch.zeros((len(labels), 2, heat_h, heat_w))
-                mask_target = torch.zeros((len(labels), 1, heat_h, heat_w))
-                
-                # 填充目标张量
-                for i, label in enumerate(labels):
-                    coords = label['object_coords']
-                    for x, y in coords:
-                        # 将原图坐标映射到热图坐标
-                        x_heat = x * scale_x
-                        y_heat = y * scale_y
-                        
-                        # 获取网格索引
-                        x_idx = int(x_heat)
-                        y_idx = int(y_heat)
-                        
-                        # 确保索引在有效范围内
-                        if 0 <= x_idx < heat_w and 0 <= y_idx < heat_h:
-                            # 设置分类目标
-                            cls_target[i, 0, y_idx, x_idx] = 1.0
-                            
-                            # 设置回归目标（相对于网格中心的偏移）
-                            reg_target[i, 0, y_idx, x_idx] = x_heat - x_idx  # x偏移
-                            reg_target[i, 1, y_idx, x_idx] = y_heat - y_idx  # y偏移
-                            
-                            # 设置掩码
-                            mask_target[i, 0, y_idx, x_idx] = 1.0
-                
-                # 添加到多尺度列表
-                targets['multi_scale'].append({
-                    'scale': f'p{scale_idx + 2}',  # p2, p3, p4
-                    'cls': cls_target,
-                    'reg': reg_target,
-                    'mask': mask_target
-                })
-        else:  # 单尺度模式
-            heat_h, heat_w = image_sizes
-            
-            # 计算缩放比例
-            scale_x = heat_w / orig_w
-            scale_y = heat_h / orig_h
-            
-            # 创建分类和回归目标张量
-            cls_target = torch.zeros((len(labels), 1, heat_h, heat_w))
-            reg_target = torch.zeros((len(labels), 2, heat_h, heat_w))
-            mask_target = torch.zeros((len(labels), 1, heat_h, heat_w))
-            
-            # 填充目标张量
-            for i, label in enumerate(labels):
-                coords = label['object_coords']
-                for x, y in coords:
-                    # 将原图坐标映射到热图坐标
-                    x_heat = x * scale_x
-                    y_heat = y * scale_y
-                    
-                    # 获取网格索引
-                    x_idx = int(x_heat)
-                    y_idx = int(y_heat)
-                    
-                    # 确保索引在有效范围内
-                    if 0 <= x_idx < heat_w and 0 <= y_idx < heat_h:
-                        # 设置分类目标
-                        cls_target[i, 0, y_idx, x_idx] = 1.0
-                        
-                        # 设置回归目标（相对于网格中心的偏移）
-                        reg_target[i, 0, y_idx, x_idx] = x_heat - x_idx  # x偏移
-                        reg_target[i, 1, y_idx, x_idx] = y_heat - y_idx  # y偏移
-                        
-                        # 设置掩码
-                        mask_target[i, 0, y_idx, x_idx] = 1.0
-            
-            targets = {
-                'cls': cls_target,
-                'reg': reg_target,
-                'mask': mask_target
-            }
-            
-        return targets
-        
     def _validate_epoch(self) -> Dict[str, float]:
         """
         验证一个epoch。
@@ -542,6 +567,7 @@ class TrainerSingleFrame:
                     cls_pred = p2_pred['cls']
                     reg_pred = p2_pred['reg']
                 else:
+                    
                     cls_pred = outputs['predictions']['cls']
                     reg_pred = outputs['predictions']['reg']
                 
